@@ -603,7 +603,7 @@ footer a:hover { color: var(--paper); }
     <div class="pricing-card">
       <div class="pricing-name">Individual</div>
       <div class="pricing-price" id="price-individual"><sup>$</sup>5<sub>/mo</sub></div>
-      <div class="pricing-desc">1 user · 1 install</div>
+      <div class="pricing-desc">1 seat · A$5/mo</div>
       <div class="pricing-divider"></div>
       <ul class="pricing-features">
         <li class="pricing-feature">Folder search (unlimited)</li>
@@ -612,15 +612,15 @@ footer a:hover { color: var(--paper); }
         <li class="pricing-feature">Microsoft 365 sync</li>
         <li class="pricing-feature">Email chain tracking</li>
       </ul>
-      <a href="https://github.com/pmirzapanah-hub/PAH/releases/latest/download/PAH_Setup.exe" class="btn-pricing" download>Start Free Trial</a>
+      <a href="https://projectfinder.lemonsqueezy.com/checkout/buy/8b623398-9c3a-4a51-8cc9-03da88fa3345" class="btn-pricing" id="btn-individual">Get Started</a>
     </div>
 
     <!-- Team -->
     <div class="pricing-card featured">
       <div class="featured-badge">Most Popular</div>
       <div class="pricing-name">Team</div>
-      <div class="pricing-price" id="price-team"><sup>$</sup>4<sub>/seat/mo</sub></div>
-      <div class="pricing-desc">Up to 10 users</div>
+      <div class="pricing-price" id="price-team"><sup>$</sup>29<sub>/mo</sub></div>
+      <div class="pricing-desc">Up to 10 seats · A$29/mo</div>
       <div class="pricing-divider"></div>
       <ul class="pricing-features">
         <li class="pricing-feature">Everything in Individual</li>
@@ -629,14 +629,14 @@ footer a:hover { color: var(--paper); }
         <li class="pricing-feature">Team CRM access</li>
         <li class="pricing-feature">Priority support</li>
       </ul>
-      <a href="https://github.com/pmirzapanah-hub/PAH/releases/latest/download/PAH_Setup.exe" class="btn-pricing" download>Start Free Trial</a>
+      <a href="https://projectfinder.lemonsqueezy.com/checkout/buy/f08dfabd-5703-41f0-acd7-fc7e47e99558" class="btn-pricing" id="btn-team">Get Started</a>
     </div>
 
     <!-- Business -->
     <div class="pricing-card">
       <div class="pricing-name">Business</div>
-      <div class="pricing-price" id="price-business"><sup>$</sup>3<sub>/seat/mo</sub></div>
-      <div class="pricing-desc">Up to 100 users</div>
+      <div class="pricing-price" id="price-business"><sup>$</sup>79<sub>/mo</sub></div>
+      <div class="pricing-desc">Up to 100 seats · A$79/mo</div>
       <div class="pricing-divider"></div>
       <ul class="pricing-features">
         <li class="pricing-feature">Everything in Team</li>
@@ -645,7 +645,7 @@ footer a:hover { color: var(--paper); }
         <li class="pricing-feature">Dedicated support</li>
         <li class="pricing-feature">Custom templates</li>
       </ul>
-      <a href="https://github.com/pmirzapanah-hub/PAH/releases/latest/download/PAH_Setup.exe" class="btn-pricing" download>Start Free Trial</a>
+      <a href="https://projectfinder.lemonsqueezy.com/checkout/buy/949a6dfc-0cb3-4504-a597-b2e9e753143a" class="btn-pricing" id="btn-business">Get Started</a>
     </div>
 
     <!-- Enterprise -->
@@ -661,7 +661,7 @@ footer a:hover { color: var(--paper); }
         <li class="pricing-feature">SLA agreement</li>
         <li class="pricing-feature">White-label option</li>
       </ul>
-      <a href="mailto:info.pah@mail.com" class="btn-pricing">Contact Us</a>
+      <a href="/cdn-cgi/l/email-protection#7f16111910510f1e173f121e1613511c1012" class="btn-pricing">Contact Us</a>
     </div>
   </div>
 </section>
@@ -699,7 +699,7 @@ footer a:hover { color: var(--paper); }
     <p class="section-sub">Join engineering offices saving hours every week. 14-day free trial, no card required.</p>
     <div class="cta-actions">
       <a href="https://github.com/pmirzapanah-hub/PAH/releases/latest/download/PAH_Setup.exe" class="btn-primary" download>Download Free Trial</a>
-      <a href="mailto:info.pah@mail.com" style="color:rgba(245,242,235,0.7); font-size:15px; text-decoration:none; display:flex; align-items:center; gap:8px;">
+      <a href="/cdn-cgi/l/email-protection#0c65626a63227c6d644c616d6560226f6361" style="color:rgba(245,242,235,0.7); font-size:15px; text-decoration:none; display:flex; align-items:center; gap:8px;">
         Questions? Email us →
       </a>
     </div>
@@ -712,23 +712,34 @@ footer a:hover { color: var(--paper); }
   <div class="footer-links">
     <a href="#">Privacy Policy</a>
     <a href="#">Terms of Use</a>
-    <a href="mailto:info.pah@mail.com">Contact</a>
+    <a href="/cdn-cgi/l/email-protection#9cf5f2faf3b2ecfdf4dcf1fdf5f0b2fff3f1">Contact</a>
   </div>
   <div style="font-size:13px;">© 2026 Project Finder. Built in Australia 🇦🇺</div>
 </footer>
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // Billing toggle
 let isYearly = false;
 const prices = {
   individual: { monthly: '$5', yearly: '$50' },
-  team:       { monthly: '$4', yearly: '$40' },
-  business:   { monthly: '$3', yearly: '$30' },
+  team:       { monthly: '$29', yearly: '$290' },
+  business:   { monthly: '$79', yearly: '$790' },
 };
 const subs = {
   individual: { monthly: '/mo', yearly: '/yr' },
-  team:       { monthly: '/seat/mo', yearly: '/seat/yr' },
-  business:   { monthly: '/seat/mo', yearly: '/seat/yr' },
+  team:       { monthly: '/mo', yearly: '/yr' },
+  business:   { monthly: '/mo', yearly: '/yr' },
+};
+
+const monthlyLinks = {
+  individual: 'https://projectfinder.lemonsqueezy.com/checkout/buy/8b623398-9c3a-4a51-8cc9-03da88fa3345',
+  team:       'https://projectfinder.lemonsqueezy.com/checkout/buy/f08dfabd-5703-41f0-acd7-fc7e47e99558',
+  business:   'https://projectfinder.lemonsqueezy.com/checkout/buy/949a6dfc-0cb3-4504-a597-b2e9e753143a',
+};
+const yearlyLinks = {
+  individual: 'https://projectfinder.lemonsqueezy.com/checkout/buy/ffda051a-4b6c-4dc6-8806-fc989790d837',
+  team:       'https://projectfinder.lemonsqueezy.com/checkout/buy/7a112a1f-d6a4-4bc7-b3a2-cdd2fdc19662',
+  business:   'https://projectfinder.lemonsqueezy.com/checkout/buy/3cb19ac0-d8be-436b-9f44-5c818edbab90',
 };
 
 function toggleBilling() {
@@ -742,6 +753,8 @@ function toggleBilling() {
   yLabel.classList.toggle('active', isYearly);
 
   const period = isYearly ? 'yearly' : 'monthly';
+  const links  = isYearly ? yearlyLinks : monthlyLinks;
+
   Object.entries(prices).forEach(([plan, p]) => {
     const el = document.getElementById('price-' + plan);
     if (el) {
@@ -749,19 +762,13 @@ function toggleBilling() {
       const sub = subs[plan][period];
       el.innerHTML = `<sup>$</sup>${num}<sub>${sub}</sub>`;
     }
+    // Update button link
+    const btn = document.getElementById('btn-' + plan);
+    if (btn) btn.href = links[plan];
   });
 }
 
 // Scroll animations
 const observer = new IntersectionObserver((entries) => {
   entries.forEach((entry, i) => {
-    if (entry.isIntersecting) {
-      setTimeout(() => entry.target.classList.add('visible'), i * 100);
-    }
-  });
-}, { threshold: 0.1 });
-
-document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
-</script>
-</body>
-</html>
+    if (entry.
