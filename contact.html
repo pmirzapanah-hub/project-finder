@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Contact — Project Finder</title>
-<link rel="icon" href="PAH.ico" type="image/x-icon">
+<link rel="icon" type="image/x-icon" href="PAH.ico">
+<link rel="icon" type="image/png" href="PAH.ico">
+<link rel="apple-touch-icon" href="PAH.ico">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -29,7 +31,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);}
 textarea{resize:vertical;min-height:120px;}
 .btn{background:var(--accent);color:#fff;padding:12px 28px;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;width:100%;transition:background .2s;}
 .btn:hover{background:#b03d22;}
+.btn:disabled{background:#aaa;cursor:not-allowed;}
 .success{display:none;background:#f0faf4;border:1px solid #86efac;border-radius:8px;padding:16px;color:#166534;font-size:14px;margin-top:12px;text-align:center;}
+.error{display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:16px;color:#991b1b;font-size:14px;margin-top:12px;text-align:center;}
 a{color:var(--accent);text-decoration:none;}
 a:hover{text-decoration:underline;}
 footer{background:var(--ink);color:rgba(245,242,235,0.5);padding:32px 48px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;font-size:13px;}
@@ -37,7 +41,7 @@ footer a{color:rgba(245,242,235,0.5);text-decoration:none;}
 footer a:hover{color:#f5f2eb;}
 .footer-logo{font-family:var(--mono);font-size:14px;color:#f5f2eb;}
 .footer-links{display:flex;gap:24px;}
-@media(max-width:700px){.grid{grid-template-columns:1fr;}}
+@media(max-width:700px){.grid{grid-template-columns:1fr;}.content{padding:100px 16px 60px;}}
 </style>
 </head>
 <body>
@@ -48,7 +52,7 @@ footer a:hover{color:#f5f2eb;}
 <div class="content">
   <div class="label">Get in touch</div>
   <h1>Contact Us</h1>
-  <p class="sub">We're happy to help. Fill in the form below or email us directly at <a href="mailto:info.pah@mail.com">info.pah@mail.com</a></p>
+  <p class="sub">We're happy to help. Fill in the form below or email us at <a href="mailto:info.pah@mail.com">info.pah@mail.com</a></p>
 
   <div class="grid">
 
@@ -56,43 +60,45 @@ footer a:hover{color:#f5f2eb;}
     <div class="card">
       <h2>General Enquiry</h2>
       <p class="card-sub">Support, billing, or anything else</p>
-      <form id="general-form" onsubmit="submitGeneral(event)">
-        <label>Your name</label>
-        <input type="text" id="g-name" placeholder="Jane Smith" required>
-        <label>Email address</label>
-        <input type="email" id="g-email" placeholder="jane@company.com" required>
-        <label>Subject</label>
-        <select id="g-subject">
+      <form id="general-form">
+        <label for="g-name">Your name</label>
+        <input type="text" id="g-name" name="name" placeholder="Jane Smith" required>
+        <label for="g-email">Email address</label>
+        <input type="email" id="g-email" name="email" placeholder="jane@company.com" required>
+        <label for="g-subject">Subject</label>
+        <select id="g-subject" name="subject">
           <option>General question</option>
           <option>Technical support</option>
           <option>Billing / subscription</option>
           <option>Feature request</option>
           <option>Other</option>
         </select>
-        <label>Message</label>
-        <textarea id="g-message" placeholder="How can we help?" required></textarea>
-        <button type="submit" class="btn">Send message</button>
+        <label for="g-message">Message</label>
+        <textarea id="g-message" name="message" placeholder="How can we help?" required></textarea>
+        <button type="submit" class="btn" id="g-btn">Send message</button>
         <div class="success" id="g-success">✓ Message sent! We'll get back to you within 1 business day.</div>
+        <div class="error" id="g-error">Something went wrong. Please email us directly at info.pah@mail.com</div>
       </form>
     </div>
 
     <!-- Enterprise -->
     <div class="card" id="enterprise">
       <h2>Enterprise Enquiry</h2>
-      <p class="card-sub">For teams of 100+ seats, custom onboarding, or white-label</p>
-      <form id="enterprise-form" onsubmit="submitEnterprise(event)">
-        <label>Your name</label>
-        <input type="text" id="e-name" placeholder="John Williams" required>
-        <label>Company name</label>
-        <input type="text" id="e-company" placeholder="Williams Engineering Pty Ltd" required>
-        <label>Work email</label>
-        <input type="email" id="e-email" placeholder="john@company.com" required>
-        <label>Number of seats needed</label>
-        <input type="number" id="e-seats" placeholder="e.g. 250" min="101" required>
-        <label>Tell us about your requirements</label>
-        <textarea id="e-message" placeholder="Office locations, IT environment, integration needs..." required></textarea>
-        <button type="submit" class="btn">Request a quote</button>
-        <div class="success" id="e-success">✓ Request received! We'll prepare a custom quote and contact you within 2 business days.</div>
+      <p class="card-sub">For teams over 100 seats, custom onboarding, or white-label</p>
+      <form id="enterprise-form">
+        <label for="e-name">Your name</label>
+        <input type="text" id="e-name" name="name" placeholder="John Williams" required>
+        <label for="e-company">Company name</label>
+        <input type="text" id="e-company" name="company" placeholder="Williams Engineering Pty Ltd" required>
+        <label for="e-email">Work email</label>
+        <input type="email" id="e-email" name="email" placeholder="john@company.com" required>
+        <label for="e-seats">Number of seats needed</label>
+        <input type="number" id="e-seats" name="seats" placeholder="e.g. 250" min="101" required>
+        <label for="e-message">Requirements</label>
+        <textarea id="e-message" name="message" placeholder="Office locations, IT environment, integration needs..." required></textarea>
+        <button type="submit" class="btn" id="e-btn">Request a quote</button>
+        <div class="success" id="e-success">✓ Request received! We'll prepare a custom quote within 2 business days.</div>
+        <div class="error" id="e-error">Something went wrong. Please email us directly at info.pah@mail.com</div>
       </form>
     </div>
 
@@ -110,40 +116,49 @@ footer a:hover{color:#f5f2eb;}
 </footer>
 
 <script>
-function submitGeneral(e) {
-  e.preventDefault();
-  const name    = document.getElementById('g-name').value;
-  const email   = document.getElementById('g-email').value;
-  const subject = document.getElementById('g-subject').value;
-  const message = document.getElementById('g-message').value;
+// FORMSPREE ENDPOINTS — replace with your actual endpoints from formspree.io
+const GENERAL_ENDPOINT    = 'xwvwdwqk';
+const ENTERPRISE_ENDPOINT = 'xnjokozp';
 
-  const body = encodeURIComponent(
-    `Name: ${name}\nEmail: ${email}\nSubject: ${subject}\n\n${message}`
-  );
-  const mailto = `mailto:info.pah@mail.com?subject=${encodeURIComponent('PAH Contact: ' + subject)}&body=${body}`;
-  window.location.href = mailto;
+async function submitForm(formId, endpoint, btnId, successId, errorId) {
+  const form = document.getElementById(formId);
+  const btn  = document.getElementById(btnId);
+  const data = new FormData(form);
 
-  document.getElementById('g-success').style.display = 'block';
-  document.getElementById('general-form').reset();
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  try {
+    const res = await fetch(`https://formspree.io/f/${endpoint}`, {
+      method: 'POST',
+      body: data,
+      headers: { 'Accept': 'application/json' }
+    });
+    if (res.ok) {
+      document.getElementById(successId).style.display = 'block';
+      document.getElementById(errorId).style.display   = 'none';
+      form.reset();
+    } else {
+      throw new Error('Server error');
+    }
+  } catch {
+    document.getElementById(errorId).style.display   = 'block';
+    document.getElementById(successId).style.display = 'none';
+  }
+
+  btn.disabled = false;
+  btn.textContent = formId === 'general-form' ? 'Send message' : 'Request a quote';
 }
 
-function submitEnterprise(e) {
+document.getElementById('general-form').addEventListener('submit', e => {
   e.preventDefault();
-  const name    = document.getElementById('e-name').value;
-  const company = document.getElementById('e-company').value;
-  const email   = document.getElementById('e-email').value;
-  const seats   = document.getElementById('e-seats').value;
-  const message = document.getElementById('e-message').value;
+  submitForm('general-form', GENERAL_ENDPOINT, 'g-btn', 'g-success', 'g-error');
+});
 
-  const body = encodeURIComponent(
-    `Name: ${name}\nCompany: ${company}\nEmail: ${email}\nSeats needed: ${seats}\n\nRequirements:\n${message}`
-  );
-  const mailto = `mailto:info.pah@mail.com?subject=${encodeURIComponent('PAH Enterprise Enquiry — ' + company)}&body=${body}`;
-  window.location.href = mailto;
-
-  document.getElementById('e-success').style.display = 'block';
-  document.getElementById('enterprise-form').reset();
-}
+document.getElementById('enterprise-form').addEventListener('submit', e => {
+  e.preventDefault();
+  submitForm('enterprise-form', ENTERPRISE_ENDPOINT, 'e-btn', 'e-success', 'e-error');
+});
 </script>
 </body>
 </html>
