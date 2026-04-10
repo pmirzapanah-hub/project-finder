@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact — Project Finder</title>
+<link rel="icon" href="PAH.ico" type="image/x-icon">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0f1117;--paper:#f5f2eb;--accent:#c84b2f;--muted:#6b6b6b;--border:#d4cfc4;--card:#fff;--sans:'DM Sans',sans-serif;--serif:'DM Serif Display',serif;--mono:'DM Mono',monospace;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:18px 48px;background:rgba(245,242,235,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);}
+.nav-logo{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--ink);text-decoration:none;}
+.nav-logo span{color:var(--accent);}
+.content{max-width:900px;margin:0 auto;padding:120px 24px 80px;}
+.label{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px;}
+h1{font-family:var(--serif);font-size:clamp(32px,4vw,48px);line-height:1.1;margin-bottom:16px;}
+.sub{color:var(--muted);font-size:18px;margin-bottom:64px;}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:36px;}
+h2{font-family:var(--serif);font-size:24px;margin-bottom:8px;}
+.card-sub{color:var(--muted);font-size:14px;margin-bottom:28px;}
+label{display:block;font-size:14px;font-weight:500;margin-bottom:6px;color:var(--ink);}
+input,textarea,select{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:15px;background:#fff;color:var(--ink);margin-bottom:16px;outline:none;transition:border-color .2s;}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);}
+textarea{resize:vertical;min-height:120px;}
+.btn{background:var(--accent);color:#fff;padding:12px 28px;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;width:100%;transition:background .2s;}
+.btn:hover{background:#b03d22;}
+.success{display:none;background:#f0faf4;border:1px solid #86efac;border-radius:8px;padding:16px;color:#166534;font-size:14px;margin-top:12px;text-align:center;}
+a{color:var(--accent);text-decoration:none;}
+a:hover{text-decoration:underline;}
+footer{background:var(--ink);color:rgba(245,242,235,0.5);padding:32px 48px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;font-size:13px;}
+footer a{color:rgba(245,242,235,0.5);text-decoration:none;}
+footer a:hover{color:#f5f2eb;}
+.footer-logo{font-family:var(--mono);font-size:14px;color:#f5f2eb;}
+.footer-links{display:flex;gap:24px;}
+@media(max-width:700px){.grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<nav>
+  <a href="index.html" class="nav-logo">Project<span>Finder</span></a>
+</nav>
+
+<div class="content">
+  <div class="label">Get in touch</div>
+  <h1>Contact Us</h1>
+  <p class="sub">We're happy to help. Fill in the form below or email us directly at <a href="mailto:info.pah@mail.com">info.pah@mail.com</a></p>
+
+  <div class="grid">
+
+    <!-- General Contact -->
+    <div class="card">
+      <h2>General Enquiry</h2>
+      <p class="card-sub">Support, billing, or anything else</p>
+      <form id="general-form" onsubmit="submitGeneral(event)">
+        <label>Your name</label>
+        <input type="text" id="g-name" placeholder="Jane Smith" required>
+        <label>Email address</label>
+        <input type="email" id="g-email" placeholder="jane@company.com" required>
+        <label>Subject</label>
+        <select id="g-subject">
+          <option>General question</option>
+          <option>Technical support</option>
+          <option>Billing / subscription</option>
+          <option>Feature request</option>
+          <option>Other</option>
+        </select>
+        <label>Message</label>
+        <textarea id="g-message" placeholder="How can we help?" required></textarea>
+        <button type="submit" class="btn">Send message</button>
+        <div class="success" id="g-success">✓ Message sent! We'll get back to you within 1 business day.</div>
+      </form>
+    </div>
+
+    <!-- Enterprise -->
+    <div class="card" id="enterprise">
+      <h2>Enterprise Enquiry</h2>
+      <p class="card-sub">For teams of 100+ seats, custom onboarding, or white-label</p>
+      <form id="enterprise-form" onsubmit="submitEnterprise(event)">
+        <label>Your name</label>
+        <input type="text" id="e-name" placeholder="John Williams" required>
+        <label>Company name</label>
+        <input type="text" id="e-company" placeholder="Williams Engineering Pty Ltd" required>
+        <label>Work email</label>
+        <input type="email" id="e-email" placeholder="john@company.com" required>
+        <label>Number of seats needed</label>
+        <input type="number" id="e-seats" placeholder="e.g. 250" min="101" required>
+        <label>Tell us about your requirements</label>
+        <textarea id="e-message" placeholder="Office locations, IT environment, integration needs..." required></textarea>
+        <button type="submit" class="btn">Request a quote</button>
+        <div class="success" id="e-success">✓ Request received! We'll prepare a custom quote and contact you within 2 business days.</div>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="footer-logo">Project<span style="color:#c84b2f">Finder</span></div>
+  <div class="footer-links">
+    <a href="privacy.html">Privacy Policy</a>
+    <a href="terms.html">Terms of Use</a>
+    <a href="contact.html">Contact</a>
+  </div>
+  <div>© 2026 PAH. Built in Australia 🇦🇺</div>
+</footer>
+
+<script>
+function submitGeneral(e) {
+  e.preventDefault();
+  const name    = document.getElementById('g-name').value;
+  const email   = document.getElementById('g-email').value;
+  const subject = document.getElementById('g-subject').value;
+  const message = document.getElementById('g-message').value;
+
+  const body = encodeURIComponent(
+    `Name: ${name}\nEmail: ${email}\nSubject: ${subject}\n\n${message}`
+  );
+  const mailto = `mailto:info.pah@mail.com?subject=${encodeURIComponent('PAH Contact: ' + subject)}&body=${body}`;
+  window.location.href = mailto;
+
+  document.getElementById('g-success').style.display = 'block';
+  document.getElementById('general-form').reset();
+}
+
+function submitEnterprise(e) {
+  e.preventDefault();
+  const name    = document.getElementById('e-name').value;
+  const company = document.getElementById('e-company').value;
+  const email   = document.getElementById('e-email').value;
+  const seats   = document.getElementById('e-seats').value;
+  const message = document.getElementById('e-message').value;
+
+  const body = encodeURIComponent(
+    `Name: ${name}\nCompany: ${company}\nEmail: ${email}\nSeats needed: ${seats}\n\nRequirements:\n${message}`
+  );
+  const mailto = `mailto:info.pah@mail.com?subject=${encodeURIComponent('PAH Enterprise Enquiry — ' + company)}&body=${body}`;
+  window.location.href = mailto;
+
+  document.getElementById('e-success').style.display = 'block';
+  document.getElementById('enterprise-form').reset();
+}
+</script>
+</body>
+</html>
