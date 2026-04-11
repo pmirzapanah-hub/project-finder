@@ -930,6 +930,17 @@ async function activateLicence() {
   if (!key) { showToast('Please enter a licence key', 'error'); return; }
   const btn = document.querySelector('#modal-body .btn-primary');
   btn.textContent = 'Activating...'; btn.disabled = true;
+
+  // Owner bypass key
+  if (key === 'PAH-OWNER-2026') {
+    state.licence = { activated: true, key, instanceId: 'owner' };
+    localStorage.setItem(LS_LICENCE, JSON.stringify(state.licence));
+    updateLicenceUI();
+    closeModal();
+    showToast('Licence activated!', 'success');
+    return;
+  }
+
   try {
     const res = await fetch('https://api.lemonsqueezy.com/v1/licenses/activate', {
       method: 'POST',
