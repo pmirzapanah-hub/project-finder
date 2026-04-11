@@ -670,9 +670,9 @@ async function createProject() {
   } catch(e) {
     btn.textContent = 'Create Project'; btn.disabled = false;
     if (e.message.includes('409') || e.message.includes('nameAlreadyExists'))
-      showToast('A project with this number already exists', 'error');
+      showToast('Project already exists', 'error');
     else
-      showToast('Failed to create project', 'error');
+      showToast('Error: ' + e.message.substring(0, 60), 'error');
   }
 }
 
@@ -995,25 +995,44 @@ async function deactivateLicence() {
 }
 
 // ── Settings ──
+function extractFolderName(val) {
+  if (!val) return '';
+  val = val.trim();
+  if (!val.startsWith('http')) return val; // already clean
+  try {
+    // Extract from URL like: ...%2FDocuments%2FJobs&...
+    // or: .../Documents/Jobs?...
+    const decoded = decodeURIComponent(val);
+    // Match pattern after "Documents/" or "documents/"
+    const m = decoded.match(/[Dd]ocuments[\/\]([^\/\?&]+)/);
+    if (m) return m[1];
+    // Try last path segment before query
+    const noQuery = decoded.split('?')[0].split('&')[0];
+    const parts = noQuery.split(/[\/\]/);
+    const last = parts.filter(p => p && !p.startsWith('http')).pop();
+    return last || val;
+  } catch(e) { return val; }
+}
+
 function saveSettings() {
   const bpEl = document.getElementById('base-path');
   const tpEl = document.getElementById('template-path');
-  const bp = bpEl ? bpEl.value.trim() : '';
-  const tp = tpEl ? tpEl.value.trim() : '';
-  if (!bp) { showToast('Please enter a base path', 'error'); return; }
-  // Save directly - no URL stripping
+  const rawBp = bpEl ? bpEl.value.trim() : '';
+  const rawTp = tpEl ? tpEl.value.trim() : '';
+  if (!rawBp) { showToast('Please enter a base path', 'error'); return; }
+
+  const bp = extractFolderName(rawBp);
+  const tp = extractFolderName(rawTp);
+
   state.settings.basePath = bp;
   state.settings.templatePath = tp;
-  const toSave = JSON.stringify(state.settings);
-  localStorage.setItem(LS_SETTINGS, toSave);
-  // Verify it saved
-  const verify = localStorage.getItem(LS_SETTINGS);
-  if (verify) {
-    showToast('Saved: ' + bp, 'success');
-  } else {
-    showToast('Save failed!', 'error');
-    return;
-  }
+  localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings));
+
+  // Update fields with clean values
+  if (bpEl) bpEl.value = bp;
+  if (tpEl) tpEl.value = tp;
+
+  showToast('Saved: ' + bp, 'success');
   loadProjects();
 }
 
