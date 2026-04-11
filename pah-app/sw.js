@@ -1,4 +1,4 @@
-const CACHE = 'pah-v1';
+const CACHE = 'pah-v3';
 const ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
@@ -13,10 +13,13 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// Network first - always get fresh content
 self.addEventListener('fetch', e => {
   if (e.request.url.includes('graph.microsoft.com') ||
       e.request.url.includes('login.microsoftonline.com') ||
-      e.request.url.includes('lemonsqueezy.com')) return;
+      e.request.url.includes('lemonsqueezy.com') ||
+      e.request.url.includes('fonts.googleapis.com')) return;
+  // Always fetch fresh from network
   e.respondWith(
     fetch(e.request).catch(() => caches.match(e.request))
   );

@@ -996,17 +996,24 @@ async function deactivateLicence() {
 
 // ── Settings ──
 function saveSettings() {
-  const bp = (document.getElementById('base-path').value || '').trim();
-  const tp = (document.getElementById('template-path')?.value || '').trim();
-  // Don't save URLs — only plain folder names
-  state.settings.basePath = (bp && !bp.startsWith('http')) ? bp : 'Jobs';
-  state.settings.templatePath = (tp && !tp.startsWith('http')) ? tp : '';
-  localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings));
-  // Update display fields with cleaned values
-  document.getElementById('base-path').value = state.settings.basePath;
-  if (document.getElementById('template-path'))
-    document.getElementById('template-path').value = state.settings.templatePath;
-  showToast('Settings saved: ' + state.settings.basePath, 'success');
+  const bpEl = document.getElementById('base-path');
+  const tpEl = document.getElementById('template-path');
+  const bp = bpEl ? bpEl.value.trim() : '';
+  const tp = tpEl ? tpEl.value.trim() : '';
+  if (!bp) { showToast('Please enter a base path', 'error'); return; }
+  // Save directly - no URL stripping
+  state.settings.basePath = bp;
+  state.settings.templatePath = tp;
+  const toSave = JSON.stringify(state.settings);
+  localStorage.setItem(LS_SETTINGS, toSave);
+  // Verify it saved
+  const verify = localStorage.getItem(LS_SETTINGS);
+  if (verify) {
+    showToast('Saved: ' + bp, 'success');
+  } else {
+    showToast('Save failed!', 'error');
+    return;
+  }
   loadProjects();
 }
 
