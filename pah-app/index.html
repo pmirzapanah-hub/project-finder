@@ -430,9 +430,14 @@ async function loadApp() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('main-app').style.display = 'flex';
 
-  // Load settings
-  const savedSettings = localStorage.getItem(LS_SETTINGS);
-  if (savedSettings) state.settings = { ...state.settings, ...JSON.parse(savedSettings) };
+  // Load settings FIRST before anything else
+  try {
+    const savedSettings = localStorage.getItem(LS_SETTINGS);
+    if (savedSettings) {
+      const parsed = JSON.parse(savedSettings);
+      state.settings = { ...state.settings, ...parsed };
+    }
+  } catch(e) {}
 
   // Load user
   try {
@@ -458,20 +463,10 @@ async function loadProjects() {
   el.innerHTML = '<div class="spinner"></div><div class="loading-text">Loading projects...</div>';
 
   try {
-    let basePath = state.settings.basePath || 'Jobs';
-    // Strip full OneDrive URLs - extract just the folder name
-    if (basePath.includes('onedrive.live.com') || basePath.includes('sharepoint.com') || basePath.startsWith('http')) {
-      // Try to extract folder name from URL path
-      const match = basePath.match(/Documents%2F([^&%]+)/i) || basePath.match(/Documents\/([^&?]+)/i);
-      if (match) basePath = decodeURIComponent(match[1]);
-      else basePath = 'Jobs';
-    }
-    state.settings.basePath = basePath;
-    const bpEl = document.getElementById('base-path');
-    if (bpEl) bpEl.value = basePath;
+    const basePath = state.settings.basePath || 'Jobs';
 
     // Get files from OneDrive root
-    const data = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}:/children?$orderby=name desc&$top=200`);
+    const data = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}:/children?$orderby=name&$top=200`);
     const folders = (data.value || []).filter(i => i.folder);
 
     state.projects = folders.map(f => {
@@ -596,18 +591,21 @@ function openFileItem(url) {
 
 // ── New Project ──
 function showNewProjectModal() {
-  // Find next project number from existing projects
+  // Find next project number from all project names
   let nextNum = '';
-  if (state.projects.length > 0) {
-    const nums = state.projects
-      .map(p => parseInt(p.num))
-      .filter(n => !isNaN(n))
-      .sort((a, b) => b - a);
-    if (nums.length > 0) {
-      const maxNum = nums[0];
-      const digits = String(maxNum).length;
-      nextNum = String(maxNum + 1).padStart(digits, '0');
-    }
+  const allProjects = state.projects.length > 0 ? state.projects : [];
+  const nums = allProjects
+    .map(p => {
+      // Try to extract leading digits from folder name
+      const m = p.name.match(/^(\d+)/);
+      return m ? parseInt(m[1]) : NaN;
+    })
+    .filter(n => !isNaN(n) && n > 1000) // ignore small numbers
+    .sort((a, b) => b - a);
+  if (nums.length > 0) {
+    const maxNum = nums[0];
+    const digits = String(maxNum).length;
+    nextNum = String(maxNum + 1).padStart(digits, '0');
   }
 
   document.getElementById('modal-body').innerHTML = `
@@ -636,24 +634,34 @@ async function createProject() {
   btn.textContent = 'Creating...'; btn.disabled = true;
 
   try {
-    const basePath = state.settings.basePath || 'Projects';
-    // Create folder in OneDrive
-    await graphPost(`/me/drive/root:/${encodeURIComponent(basePath)}:/children`, {
+    const basePath = state.settings.basePath || 'Jobs';
+
+    // First get the parent folder ID
+    const parentFolder = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}`);
+    const parentId = parentFolder.id;
+
+    // Create folder using parent ID (more reliable)
+    await graphPost(`/me/drive/items/${parentId}/children`, {
       name: folderName,
       folder: {},
       '@microsoft.graph.conflictBehavior': 'fail'
     });
 
     // Copy template if specified
-    const templatePath = state.settings.templatePath || '';
-    if (templatePath) {
+    const templateName = state.settings.templatePath || '';
+    if (templateName) {
       try {
-        const template = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}/${encodeURIComponent(templatePath)}`);
-        await graphPost(`/me/drive/items/${template.id}/copy`, {
-          parentReference: { path: `/drive/root:/${basePath}/${folderName}` },
-          name: folderName
-        });
-      } catch(e) { /* template copy failed — not critical */ }
+        const template = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}/${encodeURIComponent(templateName)}`);
+        const newFolder = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}/${encodeURIComponent(folderName)}`);
+        // Copy template contents into new folder
+        const templateChildren = await graphGet(`/me/drive/items/${template.id}/children`);
+        for (const item of (templateChildren.value || [])) {
+          await graphPost(`/me/drive/items/${item.id}/copy`, {
+            parentReference: { id: newFolder.id },
+            name: item.name
+          });
+        }
+      } catch(e) { /* template copy optional */ }
     }
 
     closeModal();
@@ -988,10 +996,17 @@ async function deactivateLicence() {
 
 // ── Settings ──
 function saveSettings() {
-  state.settings.basePath = document.getElementById('base-path').value.trim() || 'Jobs';
-  state.settings.templatePath = document.getElementById('template-path')?.value.trim() || '';
+  const bp = (document.getElementById('base-path').value || '').trim();
+  const tp = (document.getElementById('template-path')?.value || '').trim();
+  // Don't save URLs — only plain folder names
+  state.settings.basePath = (bp && !bp.startsWith('http')) ? bp : 'Jobs';
+  state.settings.templatePath = (tp && !tp.startsWith('http')) ? tp : '';
   localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings));
-  showToast('Settings saved', 'success');
+  // Update display fields with cleaned values
+  document.getElementById('base-path').value = state.settings.basePath;
+  if (document.getElementById('template-path'))
+    document.getElementById('template-path').value = state.settings.templatePath;
+  showToast('Settings saved: ' + state.settings.basePath, 'success');
   loadProjects();
 }
 
@@ -1016,7 +1031,7 @@ function showPage(name) {
   if (name === 'crm') loadCRM();
   if (name === 'settings') {
     const bp = document.getElementById('base-path');
-    if (bp) bp.value = state.settings.basePath || 'Jobs';
+    if (bp) bp.value = state.settings.basePath || '';
     const tp = document.getElementById('template-path');
     if (tp) tp.value = state.settings.templatePath || '';
     updateLicenceUI();
