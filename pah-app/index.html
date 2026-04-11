@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PAH">
+<meta name="theme-color" content="#0f1117">
+<title>PAH — Project Finder</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="../PAH.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & tokens ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2a2d3e;
+  --accent:#c84b2f;--accent2:#e8683d;--fg:#f0ede6;--muted:#8b8fa8;
+  --success:#2ecc71;--warning:#f39c12;--danger:#e74c3c;
+  --sans:'DM Sans',sans-serif;--mono:'DM Mono',monospace;--serif:'DM Serif Display',serif;
+  --radius:12px;--safe-top:env(safe-area-inset-top);--safe-bot:env(safe-area-inset-bottom);
+}
+html,body{height:100%;background:var(--bg);color:var(--fg);font-family:var(--sans);overflow:hidden;}
+
+/* ── Layout ── */
+#app{display:flex;flex-direction:column;height:100%;padding-top:var(--safe-top);}
+#topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;}
+.topbar-title{font-family:var(--mono);font-size:15px;font-weight:500;letter-spacing:.02em;}
+.topbar-title span{color:var(--accent);}
+#content{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
+#navbar{display:flex;background:var(--surface);border-top:1px solid var(--border);padding-bottom:var(--safe-bot);flex-shrink:0;}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px;border:none;background:none;color:var(--muted);font-size:10px;font-family:var(--sans);cursor:pointer;transition:color .15s;}
+.nav-btn.active{color:var(--accent);}
+.nav-btn svg{width:22px;height:22px;stroke-width:1.8;}
+
+/* ── Pages ── */
+.page{display:none;padding:16px;}
+.page.active{display:block;}
+
+/* ── Auth screen ── */
+#auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:32px;text-align:center;gap:24px;}
+.auth-logo{width:80px;height:80px;background:var(--accent);border-radius:20px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:28px;font-weight:500;color:#fff;margin-bottom:8px;}
+.auth-title{font-family:var(--serif);font-size:32px;}
+.auth-sub{color:var(--muted);font-size:15px;line-height:1.6;max-width:280px;}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 24px;border:none;border-radius:var(--radius);font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;transition:all .15s;width:100%;justify-content:center;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:active{background:var(--accent2);}
+.btn-secondary{background:var(--surface2);color:var(--fg);border:1px solid var(--border);}
+.btn-secondary:active{opacity:.7;}
+.btn-danger{background:transparent;color:var(--danger);border:1px solid var(--danger);}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+.card-title{font-size:13px;color:var(--muted);font-family:var(--mono);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;}
+
+/* ── Search ── */
+.search-bar{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;}
+.search-bar input{flex:1;background:none;border:none;outline:none;color:var(--fg);font-size:16px;font-family:var(--sans);}
+.search-bar input::placeholder{color:var(--muted);}
+.search-bar svg{color:var(--muted);flex-shrink:0;}
+
+/* ── Project list ── */
+.project-item{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:8px;cursor:pointer;transition:border-color .15s;}
+.project-item:active{border-color:var(--accent);}
+.project-num{font-family:var(--mono);font-size:12px;color:var(--accent);background:rgba(200,75,47,.12);padding:4px 8px;border-radius:6px;white-space:nowrap;}
+.project-name{font-size:15px;font-weight:500;flex:1;line-height:1.3;}
+.project-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.project-arrow{color:var(--muted);}
+
+/* ── Project detail ── */
+.back-btn{display:flex;align-items:center;gap:6px;color:var(--accent);font-size:14px;background:none;border:none;cursor:pointer;padding:0;margin-bottom:16px;font-family:var(--sans);}
+.detail-header{margin-bottom:20px;}
+.detail-num{font-family:var(--mono);font-size:13px;color:var(--accent);margin-bottom:4px;}
+.detail-name{font-family:var(--serif);font-size:24px;line-height:1.2;}
+.action-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;}
+.action-btn{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 8px;cursor:pointer;transition:border-color .15s;font-size:12px;color:var(--fg);font-family:var(--sans);}
+.action-btn:active{border-color:var(--accent);}
+.action-btn svg{width:24px;height:24px;stroke:var(--accent);}
+
+/* ── Forms ── */
+.form-group{margin-bottom:16px;}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px;font-family:var(--mono);}
+input,textarea,select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;color:var(--fg);font-size:15px;font-family:var(--sans);outline:none;-webkit-appearance:none;}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);}
+textarea{resize:vertical;min-height:100px;}
+select option{background:var(--surface2);}
+
+/* ── Section header ── */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.section-title{font-family:var(--mono);font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+.section-action{font-size:13px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:var(--sans);}
+
+/* ── Email item ── */
+.email-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:8px;cursor:pointer;}
+.email-item:active{border-color:var(--accent);}
+.email-from{font-size:14px;font-weight:600;margin-bottom:4px;}
+.email-subject{font-size:14px;color:var(--muted);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.email-date{font-size:12px;color:var(--muted);font-family:var(--mono);}
+.email-unread .email-from{color:var(--accent);}
+
+/* ── Badge ── */
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-family:var(--mono);}
+.badge-success{background:rgba(46,204,113,.15);color:var(--success);}
+.badge-warning{background:rgba(243,156,18,.15);color:var(--warning);}
+.badge-danger{background:rgba(231,76,60,.15);color:var(--danger);}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity .2s;}
+.modal-overlay.open{opacity:1;pointer-events:all;}
+.modal{background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;max-height:85vh;overflow-y:auto;transform:translateY(100%);transition:transform .25s cubic-bezier(.32,.72,0,1);}
+.modal-overlay.open .modal{transform:translateY(0);}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px;}
+.modal-title{font-family:var(--serif);font-size:22px;margin-bottom:20px;}
+
+/* ── Loading ── */
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:40px auto;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{text-align:center;color:var(--muted);font-size:14px;margin-top:8px;}
+
+/* ── Empty state ── */
+.empty{text-align:center;padding:48px 24px;color:var(--muted);}
+.empty-icon{font-size:48px;margin-bottom:12px;}
+.empty-title{font-size:16px;color:var(--fg);margin-bottom:8px;}
+.empty-sub{font-size:14px;}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:calc(80px + var(--safe-bot));left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 20px;font-size:14px;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;z-index:200;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#toast.success{border-color:var(--success);color:var(--success);}
+#toast.error{border-color:var(--danger);color:var(--danger);}
+
+/* ── User avatar ── */
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;cursor:pointer;}
+
+/* ── New project form ── */
+.template-item{display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:border-color .15s;}
+.template-item.selected{border-color:var(--accent);}
+.template-name{font-size:14px;font-weight:500;}
+.template-sub{font-size:12px;color:var(--muted);}
+
+/* ── CRM ── */
+.crm-field{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border);}
+.crm-field:last-child{border:none;}
+.crm-label{font-size:12px;color:var(--muted);font-family:var(--mono);}
+.crm-value{font-size:14px;text-align:right;max-width:55%;}
+
+/* ── Licence ── */
+.licence-status{display:flex;align-items:center;gap:10px;padding:16px;background:var(--surface2);border-radius:var(--radius);margin-bottom:16px;}
+.licence-dot{width:10px;height:10px;border-radius:50%;background:var(--success);flex-shrink:0;}
+.licence-dot.inactive{background:var(--danger);}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Auth Screen -->
+  <div id="auth-screen">
+    <div>
+      <div class="auth-logo">PAH</div>
+    </div>
+    <div>
+      <h1 class="auth-title">Project Finder</h1>
+      <p class="auth-sub">Sign in with your Microsoft 365 account to access your projects.</p>
+    </div>
+    <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px;">
+      <button class="btn btn-primary" onclick="signIn()">
+        <svg width="20" height="20" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+        Sign in with Microsoft 365
+      </button>
+      <button class="btn btn-secondary" onclick="showLicenceModal()">🔑 Activate Licence</button>
+    </div>
+  </div>
+
+  <!-- Main App (hidden until signed in) -->
+  <div id="main-app" style="display:none;flex-direction:column;height:100%;">
+    <!-- Top bar -->
+    <div id="topbar">
+      <span class="topbar-title">Project<span>Finder</span></span>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button style="background:none;border:none;color:var(--muted);cursor:pointer;" onclick="showSearch()">
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </button>
+        <div class="avatar" id="user-avatar" onclick="showProfileModal()">P</div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div id="content">
+      <!-- Projects Page -->
+      <div id="page-projects" class="page active">
+        <div class="search-bar">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="project-search" placeholder="Search projects..." oninput="filterProjects(this.value)">
+        </div>
+        <div class="section-hdr">
+          <span class="section-title">Projects</span>
+          <button class="section-action" onclick="showNewProjectModal()">+ New</button>
+        </div>
+        <div id="project-list"><div class="spinner"></div></div>
+      </div>
+
+      <!-- Project Detail Page -->
+      <div id="page-detail" class="page">
+        <button class="back-btn" onclick="showPage('projects')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 12H5m0 0 7 7m-7-7 7-7"/></svg>
+          All Projects
+        </button>
+        <div id="detail-content"></div>
+      </div>
+
+      <!-- Email Page -->
+      <div id="page-email" class="page">
+        <div class="section-hdr">
+          <span class="section-title">Emails</span>
+          <button class="section-action" onclick="showComposeModal()">+ Compose</button>
+        </div>
+        <div id="email-list"><div class="spinner"></div></div>
+      </div>
+
+      <!-- CRM Page -->
+      <div id="page-crm" class="page">
+        <div class="search-bar">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" placeholder="Search CRM..." oninput="filterCRM(this.value)">
+        </div>
+        <div id="crm-list"><div class="spinner"></div></div>
+      </div>
+
+      <!-- Settings Page -->
+      <div id="page-settings" class="page">
+        <div class="card">
+          <div class="card-title">Account</div>
+          <div id="user-info" style="font-size:14px;margin-bottom:12px;color:var(--muted);">Loading...</div>
+          <button class="btn btn-secondary" onclick="signOut()">Sign Out</button>
+        </div>
+        <div class="card">
+          <div class="card-title">Base Path (OneDrive/SharePoint)</div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <input type="text" id="base-path" placeholder="e.g. Projects" value="">
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+        </div>
+        <div class="card">
+          <div class="card-title">Licence</div>
+          <div class="licence-status">
+            <div class="licence-dot" id="lic-dot"></div>
+            <div>
+              <div id="lic-status-text" style="font-size:14px;font-weight:500;">Checking...</div>
+              <div id="lic-key-display" style="font-size:12px;color:var(--muted);font-family:var(--mono);"></div>
+            </div>
+          </div>
+          <div id="lic-actions"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">App</div>
+          <div style="font-size:13px;color:var(--muted);font-family:var(--mono);">PAH — Project Finder v2.0.0</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">PWA Edition</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Nav -->
+    <nav id="navbar">
+      <button class="nav-btn active" onclick="showPage('projects')" id="nav-projects">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        Projects
+      </button>
+      <button class="nav-btn" onclick="showPage('email')" id="nav-email">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 7L2 7"/></svg>
+        Email
+      </button>
+      <button class="nav-btn" onclick="showPage('crm')" id="nav-crm">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        CRM
+      </button>
+      <button class="nav-btn" onclick="showPage('settings')" id="nav-settings">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        Settings
+      </button>
+    </nav>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal-content">
+    <div class="modal-handle"></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ── Config ──
+const CLIENT_ID = '4bc99954-7590-4dcf-bfc5-2b1c5de77d34';
+const TENANT = 'common';
+const SCOPES = 'openid profile email offline_access Mail.Read Mail.ReadWrite Mail.Send User.Read Files.ReadWrite.All Sites.ReadWrite.All';
+const REDIRECT_URI = window.location.origin + window.location.pathname;
+const LS_TOKEN = 'pah_token';
+const LS_SETTINGS = 'pah_settings';
+const LS_LICENCE = 'pah_licence';
+
+// ── State ──
+let state = {
+  token: null,
+  user: null,
+  projects: [],
+  filteredProjects: [],
+  currentProject: null,
+  settings: { basePath: 'Projects', driveId: null, siteId: null },
+  licence: { activated: false, key: '' }
+};
+
+// ── Init ──
+async function init() {
+  // Handle OAuth redirect
+  const hash = window.location.hash;
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get('code')) {
+    await handleAuthCode(params.get('code'));
+    window.history.replaceState({}, '', window.location.pathname);
+    return;
+  }
+
+  // Load saved token
+  const saved = localStorage.getItem(LS_TOKEN);
+  if (saved) {
+    try {
+      const t = JSON.parse(saved);
+      if (t.expires_at > Date.now() / 1000) {
+        state.token = t.access_token;
+        await loadApp();
+        return;
+      } else if (t.refresh_token) {
+        await refreshToken(t.refresh_token);
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Load licence state
+  const lic = localStorage.getItem(LS_LICENCE);
+  if (lic) state.licence = JSON.parse(lic);
+
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+// ── Auth ──
+function signIn() {
+  const authUrl = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/authorize` +
+    `?client_id=${CLIENT_ID}` +
+    `&response_type=code` +
+    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+    `&scope=${encodeURIComponent(SCOPES)}` +
+    `&response_mode=query` +
+    `&prompt=select_account`;
+  window.location.href = authUrl;
+}
+
+async function handleAuthCode(code) {
+  try {
+    const res = await fetch(`https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: CLIENT_ID,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        scope: SCOPES
+      })
+    });
+    const data = await res.json();
+    if (data.access_token) {
+      data.expires_at = Date.now() / 1000 + data.expires_in;
+      localStorage.setItem(LS_TOKEN, JSON.stringify(data));
+      state.token = data.access_token;
+      await loadApp();
+    } else {
+      showToast('Sign in failed', 'error');
+      document.getElementById('auth-screen').style.display = 'flex';
+    }
+  } catch(e) {
+    showToast('Sign in failed', 'error');
+    document.getElementById('auth-screen').style.display = 'flex';
+  }
+}
+
+async function refreshToken(refreshToken) {
+  try {
+    const res = await fetch(`https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: CLIENT_ID,
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        scope: SCOPES
+      })
+    });
+    const data = await res.json();
+    if (data.access_token) {
+      data.expires_at = Date.now() / 1000 + data.expires_in;
+      localStorage.setItem(LS_TOKEN, JSON.stringify(data));
+      state.token = data.access_token;
+      await loadApp();
+    } else {
+      localStorage.removeItem(LS_TOKEN);
+      document.getElementById('auth-screen').style.display = 'flex';
+    }
+  } catch(e) {
+    document.getElementById('auth-screen').style.display = 'flex';
+  }
+}
+
+function signOut() {
+  localStorage.removeItem(LS_TOKEN);
+  state.token = null;
+  state.user = null;
+  document.getElementById('main-app').style.display = 'none';
+  document.getElementById('auth-screen').style.display = 'flex';
+  closeModal();
+  showToast('Signed out');
+}
+
+// ── Graph API ──
+async function graphGet(path) {
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    headers: { Authorization: `Bearer ${state.token}` }
+  });
+  if (!res.ok) throw new Error(`Graph error: ${res.status}`);
+  return res.json();
+}
+
+async function graphPost(path, body) {
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${state.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Graph error: ${res.status}`);
+  return res.json();
+}
+
+async function graphPatch(path, body) {
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${state.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Graph error: ${res.status}`);
+  return res.json();
+}
+
+// ── Load App ──
+async function loadApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'flex';
+
+  // Load settings
+  const savedSettings = localStorage.getItem(LS_SETTINGS);
+  if (savedSettings) state.settings = { ...state.settings, ...JSON.parse(savedSettings) };
+
+  // Load user
+  try {
+    state.user = await graphGet('/me');
+    const initials = (state.user.displayName || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    document.getElementById('user-avatar').textContent = initials;
+    document.getElementById('user-info').innerHTML =
+      `<strong>${state.user.displayName}</strong><br><span style="font-family:var(--mono);font-size:12px;">${state.user.mail || state.user.userPrincipalName}</span>`;
+  } catch(e) {}
+
+  // Load licence
+  const lic = localStorage.getItem(LS_LICENCE);
+  if (lic) state.licence = JSON.parse(lic);
+  updateLicenceUI();
+
+  // Load projects
+  loadProjects();
+}
+
+// ── Projects ──
+async function loadProjects() {
+  const el = document.getElementById('project-list');
+  el.innerHTML = '<div class="spinner"></div><div class="loading-text">Loading projects...</div>';
+
+  try {
+    const basePath = state.settings.basePath || 'Projects';
+    // Get files from OneDrive root
+    const data = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}:/children?$orderby=name&$top=200`);
+    const folders = (data.value || []).filter(i => i.folder);
+
+    state.projects = folders.map(f => {
+      const match = f.name.match(/^(\d{6,10})\s*[-–]\s*(.+)$/);
+      return {
+        id: f.id,
+        name: f.name,
+        num: match ? match[1] : '',
+        desc: match ? match[2] : f.name,
+        webUrl: f.webUrl,
+        modified: f.lastModifiedDateTime,
+        driveItem: f
+      };
+    });
+
+    state.filteredProjects = [...state.projects];
+    renderProjects();
+  } catch(e) {
+    el.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">📁</div>
+        <div class="empty-title">Could not load projects</div>
+        <div class="empty-sub">Check your Base Path in Settings<br><small style="color:var(--muted);font-family:var(--mono);">${e.message}</small></div>
+      </div>
+      <button class="btn btn-secondary" onclick="loadProjects()" style="margin-top:16px;">Retry</button>`;
+  }
+}
+
+function renderProjects() {
+  const el = document.getElementById('project-list');
+  if (!state.filteredProjects.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No projects found</div><div class="empty-sub">Try a different search</div></div>';
+    return;
+  }
+  el.innerHTML = state.filteredProjects.map(p => `
+    <div class="project-item" onclick="openProject('${p.id}')">
+      ${p.num ? `<div class="project-num">${p.num}</div>` : ''}
+      <div style="flex:1;min-width:0;">
+        <div class="project-name">${p.desc}</div>
+        <div class="project-sub">${formatDate(p.modified)}</div>
+      </div>
+      <svg class="project-arrow" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+    </div>`).join('');
+}
+
+function filterProjects(q) {
+  const s = q.toLowerCase();
+  state.filteredProjects = state.projects.filter(p =>
+    p.name.toLowerCase().includes(s) || p.num.includes(s) || p.desc.toLowerCase().includes(s)
+  );
+  renderProjects();
+}
+
+function openProject(id) {
+  state.currentProject = state.projects.find(p => p.id === id);
+  if (!state.currentProject) return;
+  showPage('detail');
+  renderProjectDetail();
+}
+
+function renderProjectDetail() {
+  const p = state.currentProject;
+  document.getElementById('detail-content').innerHTML = `
+    <div class="detail-header">
+      ${p.num ? `<div class="detail-num">${p.num}</div>` : ''}
+      <div class="detail-name">${p.desc}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px;font-family:var(--mono);">Modified ${formatDate(p.modified)}</div>
+    </div>
+    <div class="action-grid">
+      <button class="action-btn" onclick="openInOneDrive()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        Open Folder
+      </button>
+      <button class="action-btn" onclick="showProjectEmails()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 7L2 7"/></svg>
+        Emails
+      </button>
+      <button class="action-btn" onclick="showProjectCRM()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        CRM
+      </button>
+      <button class="action-btn" onclick="showComposeModal()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Send Email
+      </button>
+    </div>
+    <div id="project-files-section"></div>`;
+  loadProjectFiles();
+}
+
+async function loadProjectFiles() {
+  const el = document.getElementById('project-files-section');
+  el.innerHTML = '<div class="section-hdr"><span class="section-title">Files</span></div><div class="spinner"></div>';
+  try {
+    const p = state.currentProject;
+    const data = await graphGet(`/me/drive/items/${p.id}/children?$orderby=name&$top=50`);
+    const items = data.value || [];
+    if (!items.length) { el.innerHTML += '<div class="empty"><div class="empty-sub">No files yet</div></div>'; return; }
+    el.innerHTML = `
+      <div class="section-hdr"><span class="section-title">Files</span></div>` +
+      items.map(f => `
+        <div class="project-item" onclick="openFileItem('${f.webUrl}')">
+          <span style="font-size:20px;">${f.folder ? '📁' : getFileIcon(f.name)}</span>
+          <div style="flex:1;min-width:0;">
+            <div class="project-name" style="font-size:14px;">${f.name}</div>
+            <div class="project-sub">${f.folder ? (f.folder.childCount + ' items') : formatBytes(f.size)}</div>
+          </div>
+          <svg class="project-arrow" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+        </div>`).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty"><div class="empty-sub">Could not load files</div></div>`;
+  }
+}
+
+function openInOneDrive() {
+  if (state.currentProject?.webUrl) window.open(state.currentProject.webUrl, '_blank');
+}
+
+function openFileItem(url) {
+  if (url) window.open(url, '_blank');
+}
+
+// ── New Project ──
+function showNewProjectModal() {
+  document.getElementById('modal-body').innerHTML = `
+    <h2 class="modal-title">New Project</h2>
+    <div class="form-group">
+      <label>Project Number</label>
+      <input type="text" id="new-proj-num" placeholder="e.g. 38231324" inputmode="numeric">
+    </div>
+    <div class="form-group">
+      <label>Project Description</label>
+      <input type="text" id="new-proj-desc" placeholder="e.g. Smith Residence">
+    </div>
+    <div class="form-group">
+      <label>Template Folder Path (optional)</label>
+      <input type="text" id="new-proj-template" placeholder="e.g. _Template">
+    </div>
+    <button class="btn btn-primary" onclick="createProject()">Create Project</button>`;
+  openModal();
+}
+
+async function createProject() {
+  const num = document.getElementById('new-proj-num').value.trim();
+  const desc = document.getElementById('new-proj-desc').value.trim();
+  if (!num || !desc) { showToast('Please fill in all fields', 'error'); return; }
+
+  const folderName = `${num} - ${desc}`;
+  const btn = document.querySelector('#modal-body .btn-primary');
+  btn.textContent = 'Creating...'; btn.disabled = true;
+
+  try {
+    const basePath = state.settings.basePath || 'Projects';
+    // Create folder in OneDrive
+    await graphPost(`/me/drive/root:/${encodeURIComponent(basePath)}:/children`, {
+      name: folderName,
+      folder: {},
+      '@microsoft.graph.conflictBehavior': 'fail'
+    });
+
+    // Copy template if specified
+    const templatePath = document.getElementById('new-proj-template').value.trim();
+    if (templatePath) {
+      try {
+        const template = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}/${encodeURIComponent(templatePath)}`);
+        await graphPost(`/me/drive/items/${template.id}/copy`, {
+          parentReference: { path: `/drive/root:/${basePath}/${folderName}` },
+          name: folderName
+        });
+      } catch(e) { /* template copy failed — not critical */ }
+    }
+
+    closeModal();
+    showToast('Project created!', 'success');
+    await loadProjects();
+  } catch(e) {
+    btn.textContent = 'Create Project'; btn.disabled = false;
+    if (e.message.includes('409') || e.message.includes('nameAlreadyExists'))
+      showToast('A project with this number already exists', 'error');
+    else
+      showToast('Failed to create project', 'error');
+  }
+}
+
+// ── Email ──
+async function loadEmails() {
+  const el = document.getElementById('email-list');
+  el.innerHTML = '<div class="spinner"></div>';
+  try {
+    const data = await graphGet('/me/messages?$top=40&$orderby=receivedDateTime desc&$select=id,subject,from,receivedDateTime,isRead,bodyPreview');
+    const msgs = data.value || [];
+    if (!msgs.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><div class="empty-title">No emails</div></div>'; return; }
+    el.innerHTML = msgs.map(m => `
+      <div class="email-item ${!m.isRead ? 'email-unread' : ''}" onclick="openEmail('${m.id}')">
+        <div class="email-from">${m.from?.emailAddress?.name || m.from?.emailAddress?.address || 'Unknown'}</div>
+        <div class="email-subject">${m.subject || '(no subject)'}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="email-date">${formatDate(m.receivedDateTime)}</span>
+          ${!m.isRead ? '<span class="badge badge-warning">New</span>' : ''}
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Could not load emails</div><div class="empty-sub">${e.message}</div></div>`;
+  }
+}
+
+async function showProjectEmails() {
+  const p = state.currentProject;
+  if (!p) return;
+  document.getElementById('modal-body').innerHTML = `
+    <h2 class="modal-title">${p.desc}</h2>
+    <div class="section-title" style="margin-bottom:12px;">Email Chain</div>
+    <div id="project-email-list"><div class="spinner"></div></div>`;
+  openModal();
+  try {
+    const q = encodeURIComponent(`"${p.num}" OR "${p.desc}"`);
+    const data = await graphGet(`/me/messages?$search=${q}&$top=20&$select=id,subject,from,receivedDateTime,isRead`);
+    const msgs = data.value || [];
+    const el = document.getElementById('project-email-list');
+    if (!msgs.length) { el.innerHTML = '<div class="empty"><div class="empty-sub">No emails found for this project</div></div>'; return; }
+    el.innerHTML = msgs.map(m => `
+      <div class="email-item ${!m.isRead ? 'email-unread' : ''}" onclick="openEmail('${m.id}')">
+        <div class="email-from">${m.from?.emailAddress?.name || 'Unknown'}</div>
+        <div class="email-subject">${m.subject}</div>
+        <div class="email-date">${formatDate(m.receivedDateTime)}</div>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function openEmail(id) {
+  document.getElementById('modal-body').innerHTML = '<div class="spinner"></div>';
+  openModal();
+  try {
+    const m = await graphGet(`/me/messages/${id}?$select=subject,from,toRecipients,receivedDateTime,body`);
+    document.getElementById('modal-body').innerHTML = `
+      <button class="back-btn" onclick="loadEmailsInModal()" style="margin-bottom:16px;">← Back</button>
+      <div style="margin-bottom:16px;">
+        <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${m.subject}</div>
+        <div style="font-size:13px;color:var(--muted);">From: ${m.from?.emailAddress?.address}</div>
+        <div style="font-size:12px;color:var(--muted);font-family:var(--mono);">${formatDate(m.receivedDateTime)}</div>
+      </div>
+      <div style="font-size:14px;line-height:1.6;color:var(--fg);background:var(--surface2);border-radius:8px;padding:12px;max-height:40vh;overflow-y:auto;">
+        ${m.body?.content || ''}
+      </div>
+      <button class="btn btn-primary" style="margin-top:16px;" onclick="replyToEmail('${id}','${encodeURIComponent(m.subject)}','${encodeURIComponent(m.from?.emailAddress?.address || '')}')">Reply</button>`;
+  } catch(e) {
+    document.getElementById('modal-body').innerHTML = '<div class="empty"><div class="empty-sub">Could not load email</div></div>';
+  }
+}
+
+function replyToEmail(id, subject, to) {
+  showComposeModal(decodeURIComponent(to), 'Re: ' + decodeURIComponent(subject));
+}
+
+function showComposeModal(to = '', subject = '') {
+  const p = state.currentProject;
+  document.getElementById('modal-body').innerHTML = `
+    <h2 class="modal-title">New Email</h2>
+    <div class="form-group">
+      <label>To</label>
+      <input type="email" id="compose-to" value="${to}" placeholder="recipient@example.com">
+    </div>
+    <div class="form-group">
+      <label>Subject</label>
+      <input type="text" id="compose-subject" value="${subject || (p ? p.desc : '')}" placeholder="Subject">
+    </div>
+    <div class="form-group">
+      <label>Message</label>
+      <textarea id="compose-body" placeholder="Type your message..."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="sendEmail()">Send Email</button>`;
+  openModal();
+}
+
+async function sendEmail() {
+  const to = document.getElementById('compose-to').value.trim();
+  const subject = document.getElementById('compose-subject').value.trim();
+  const body = document.getElementById('compose-body').value.trim();
+  if (!to || !subject || !body) { showToast('Please fill in all fields', 'error'); return; }
+
+  const btn = document.querySelector('#modal-body .btn-primary');
+  btn.textContent = 'Sending...'; btn.disabled = true;
+
+  try {
+    await graphPost('/me/sendMail', {
+      message: {
+        subject,
+        body: { contentType: 'Text', content: body },
+        toRecipients: [{ emailAddress: { address: to } }]
+      }
+    });
+    closeModal();
+    showToast('Email sent!', 'success');
+  } catch(e) {
+    btn.textContent = 'Send Email'; btn.disabled = false;
+    showToast('Failed to send email', 'error');
+  }
+}
+
+// ── CRM ──
+async function loadCRM() {
+  const el = document.getElementById('crm-list');
+  el.innerHTML = '<div class="spinner"></div>';
+  try {
+    const basePath = state.settings.basePath || 'Projects';
+    // Look for CRM CSV in each project
+    const data = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}:/children?$top=200`);
+    const folders = (data.value || []).filter(i => i.folder);
+    el.innerHTML = folders.length ? folders.map(f => {
+      const match = f.name.match(/^(\d{6,10})\s*[-–]\s*(.+)$/);
+      return `
+        <div class="project-item" onclick="showCRMDetail('${f.id}','${encodeURIComponent(f.name)}')">
+          ${match ? `<div class="project-num">${match[1]}</div>` : ''}
+          <div style="flex:1;"><div class="project-name">${match ? match[2] : f.name}</div></div>
+          <svg class="project-arrow" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+        </div>`;
+    }).join('') : '<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">No CRM records</div></div>';
+  } catch(e) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Could not load CRM</div></div>`;
+  }
+}
+
+function filterCRM(q) {
+  // Re-render filtered
+}
+
+async function showProjectCRM() {
+  if (!state.currentProject) return;
+  showCRMDetail(state.currentProject.id, encodeURIComponent(state.currentProject.name));
+}
+
+async function showCRMDetail(folderId, folderName) {
+  document.getElementById('modal-body').innerHTML = `
+    <h2 class="modal-title">${decodeURIComponent(folderName)}</h2>
+    <div id="crm-detail-content"><div class="spinner"></div></div>`;
+  openModal();
+  try {
+    // Look for CRM CSV inside project
+    const children = await graphGet(`/me/drive/items/${folderId}/children?$filter=endswith(name,'.csv')`);
+    const csvFile = children.value?.find(f => f.name.toLowerCase().includes('crm'));
+    if (!csvFile) {
+      document.getElementById('crm-detail-content').innerHTML =
+        '<div class="empty"><div class="empty-sub">No CRM file found in this project</div></div>' +
+        `<button class="btn btn-primary" style="margin-top:16px;" onclick="createCRMRecord('${folderId}')">Create CRM Record</button>`;
+      return;
+    }
+    // Download CSV
+    const downloadRes = await fetch(csvFile['@microsoft.graph.downloadUrl'] || csvFile.webUrl);
+    const csvText = await downloadRes.text();
+    const rows = csvText.split('\n').filter(r => r.trim());
+    const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const values = rows[1] ? rows[1].split(',').map(v => v.trim().replace(/"/g, '')) : [];
+    const record = {};
+    headers.forEach((h, i) => record[h] = values[i] || '');
+    document.getElementById('crm-detail-content').innerHTML = `
+      <div class="card">` +
+      headers.map((h, i) => `
+        <div class="crm-field">
+          <div class="crm-label">${h}</div>
+          <div class="crm-value">${record[h] || '—'}</div>
+        </div>`).join('') +
+      `</div>
+      <button class="btn btn-secondary" onclick="editCRMRecord('${csvFile.id}','${encodeURIComponent(JSON.stringify(record))}')">Edit Record</button>`;
+  } catch(e) {
+    document.getElementById('crm-detail-content').innerHTML = '<div class="empty"><div class="empty-sub">Could not load CRM data</div></div>';
+  }
+}
+
+function editCRMRecord(fileId, recordJson) {
+  const record = JSON.parse(decodeURIComponent(recordJson));
+  const fields = Object.keys(record);
+  document.getElementById('modal-body').innerHTML = `
+    <h2 class="modal-title">Edit CRM Record</h2>` +
+    fields.map(f => `
+      <div class="form-group">
+        <label>${f}</label>
+        <input type="text" id="crm-${f.replace(/\s/g,'_')}" value="${record[f] || ''}">
+      </div>`).join('') +
+    `<button class="btn btn-primary" onclick="saveCRMRecord('${fileId}', ${JSON.stringify(fields).replace(/'/g, "\\'")} )">Save Changes</button>`;
+}
+
+async function saveCRMRecord(fileId, fields) {
+  const btn = document.querySelector('#modal-body .btn-primary');
+  btn.textContent = 'Saving...'; btn.disabled = true;
+  const values = fields.map(f => `"${document.getElementById('crm-' + f.replace(/\s/g,'_')).value || ''}"`);
+  const csv = fields.map(f => `"${f}"`).join(',') + '\n' + values.join(',');
+  try {
+    await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/content`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${state.token}`, 'Content-Type': 'text/csv' },
+      body: csv
+    });
+    closeModal();
+    showToast('CRM record saved!', 'success');
+  } catch(e) {
+    btn.textContent = 'Save Changes'; btn.disabled = false;
+    showToast('Save failed', 'error');
+  }
+}
+
+// ── Licence ──
+function updateLicenceUI() {
+  const dot = document.getElementById('lic-dot');
+  const text = document.getElementById('lic-status-text');
+  const keyEl = document.getElementById('lic-key-display');
+  const actions = document.getElementById('lic-actions');
+  if (!dot || !text) return;
+  if (state.licence.activated) {
+    dot.classList.remove('inactive');
+    text.textContent = '✓ Licensed';
+    keyEl.textContent = state.licence.key.substring(0, 9) + '...';
+    actions.innerHTML = `<button class="btn btn-danger" onclick="deactivateLicence()" style="margin-top:8px;">Deactivate this device</button>`;
+  } else {
+    dot.classList.add('inactive');
+    text.textContent = 'Not activated';
+    keyEl.textContent = '';
+    actions.innerHTML = `<button class="btn btn-primary" onclick="showLicenceModal()" style="margin-top:8px;">Activate Licence</button>`;
+  }
+}
+
+function showLicenceModal() {
+  document.getElementById('modal-body').innerHTML = `
+    <h2 class="modal-title">Activate Licence</h2>
+    <div class="form-group">
+      <label>Licence Key</label>
+      <input type="text" id="lic-key-input" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
+    </div>
+    <button class="btn btn-primary" onclick="activateLicence()">Activate Key</button>
+    <div style="margin:16px 0;text-align:center;color:var(--muted);font-size:13px;">— or —</div>
+    <a href="https://projectfinder.lemonsqueezy.com/checkout/buy/8b623398-9c3a-4a51-8cc9-03da88fa3345" target="_blank" class="btn btn-secondary">Buy Now →</a>`;
+  openModal();
+}
+
+async function activateLicence() {
+  const key = document.getElementById('lic-key-input').value.trim().toUpperCase();
+  if (!key) { showToast('Please enter a licence key', 'error'); return; }
+  const btn = document.querySelector('#modal-body .btn-primary');
+  btn.textContent = 'Activating...'; btn.disabled = true;
+  try {
+    const res = await fetch('https://api.lemonsqueezy.com/v1/licenses/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ license_key: key, instance_name: 'PAH_PWA_' + Date.now() })
+    });
+    const data = await res.json();
+    if (data.activated) {
+      state.licence = { activated: true, key, instanceId: data.instance?.id || '' };
+      localStorage.setItem(LS_LICENCE, JSON.stringify(state.licence));
+      updateLicenceUI();
+      closeModal();
+      showToast('Licence activated!', 'success');
+    } else {
+      btn.textContent = 'Activate Key'; btn.disabled = false;
+      showToast(data.error || 'Invalid licence key', 'error');
+    }
+  } catch(e) {
+    btn.textContent = 'Activate Key'; btn.disabled = false;
+    showToast('Activation failed — check connection', 'error');
+  }
+}
+
+async function deactivateLicence() {
+  if (!confirm('Deactivate this device? Your key will be freed for use on another device.')) return;
+  try {
+    if (state.licence.instanceId) {
+      await fetch('https://api.lemonsqueezy.com/v1/licenses/deactivate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ license_key: state.licence.key, instance_id: state.licence.instanceId })
+      });
+    }
+  } catch(e) {}
+  state.licence = { activated: false, key: '', instanceId: '' };
+  localStorage.setItem(LS_LICENCE, JSON.stringify(state.licence));
+  updateLicenceUI();
+  showToast('Licence deactivated');
+}
+
+// ── Settings ──
+function saveSettings() {
+  state.settings.basePath = document.getElementById('base-path').value.trim() || 'Projects';
+  localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings));
+  showToast('Settings saved', 'success');
+  loadProjects();
+}
+
+// ── Profile modal ──
+function showProfileModal() {
+  document.getElementById('modal-body').innerHTML = `
+    <h2 class="modal-title">${state.user?.displayName || 'Profile'}</h2>
+    <div style="font-size:14px;color:var(--muted);margin-bottom:20px;font-family:var(--mono);">${state.user?.mail || ''}</div>
+    <button class="btn btn-secondary" onclick="signOut()">Sign Out</button>`;
+  openModal();
+}
+
+// ── Navigation ──
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`page-${name}`)?.classList.add('active');
+  document.getElementById(`nav-${name}`)?.classList.add('active');
+
+  // Lazy load
+  if (name === 'email') loadEmails();
+  if (name === 'crm') loadCRM();
+  if (name === 'settings') {
+    const bp = document.getElementById('base-path');
+    if (bp) bp.value = state.settings.basePath || 'Projects';
+    updateLicenceUI();
+  }
+}
+
+// ── Modal ──
+function openModal() {
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+// ── Toast ──
+let toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 3000);
+}
+
+// ── Helpers ──
+function formatDate(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  const now = new Date();
+  const diff = (now - dt) / 1000;
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+  return dt.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatBytes(b) {
+  if (!b) return '0 B';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+
+function getFileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const icons = { pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊', csv: '📊', jpg: '🖼', jpeg: '🖼', png: '🖼', dwg: '📐', dxf: '📐', zip: '🗜', rar: '🗜' };
+  return icons[ext] || '📄';
+}
+
+function showSearch() {
+  document.getElementById('project-search')?.focus();
+  showPage('projects');
+}
+
+// ── Service Worker ──
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// ── Start ──
+init();
+</script>
+</body>
+</html>
