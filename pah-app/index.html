@@ -237,7 +237,11 @@ select option{background:var(--surface2);}
         <div class="card">
           <div class="card-title">Base Path (OneDrive/SharePoint)</div>
           <div class="form-group" style="margin-bottom:12px;">
-            <input type="text" id="base-path" placeholder="e.g. Projects" value="">
+            <input type="text" id="base-path" placeholder="e.g. Jobs" value="">
+          </div>
+          <div class="card-title" style="margin-top:12px;">Template Folder Name</div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <input type="text" id="template-path" placeholder="e.g. _Template">
           </div>
           <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
         </div>
@@ -298,7 +302,7 @@ select option{background:var(--surface2);}
 const CLIENT_ID = '4bc99954-7590-4dcf-bfc5-2b1c5de77d34';
 const TENANT = 'common';
 const SCOPES = 'openid profile email Mail.Read Mail.ReadWrite Mail.Send User.Read Files.ReadWrite.All Sites.ReadWrite.All';
-const REDIRECT_URI = window.location.origin + window.location.pathname;
+const REDIRECT_URI = 'https://pmirzapanah-hub.github.io/project-finder/pah-app/';
 const LS_TOKEN = 'pah_token';
 const LS_SETTINGS = 'pah_settings';
 const LS_LICENCE = 'pah_licence';
@@ -337,7 +341,13 @@ async function init() {
 
   // Handle error in hash
   if (hash && hash.includes('error')) {
+    const errParams = new URLSearchParams(hash.substring(1));
+    const errMsg = errParams.get('error_description') || errParams.get('error') || 'Unknown error';
     window.history.replaceState({}, '', window.location.pathname);
+    // Show error on auth screen
+    document.getElementById('auth-screen').style.display = 'flex';
+    setTimeout(() => showToast('Sign in error: ' + errMsg.substring(0, 80), 'error'), 500);
+    return;
   }
 
   // Load saved token
@@ -448,9 +458,20 @@ async function loadProjects() {
   el.innerHTML = '<div class="spinner"></div><div class="loading-text">Loading projects...</div>';
 
   try {
-    const basePath = state.settings.basePath || 'Projects';
+    let basePath = state.settings.basePath || 'Jobs';
+    // Strip full OneDrive URLs - extract just the folder name
+    if (basePath.includes('onedrive.live.com') || basePath.includes('sharepoint.com') || basePath.startsWith('http')) {
+      // Try to extract folder name from URL path
+      const match = basePath.match(/Documents%2F([^&%]+)/i) || basePath.match(/Documents\/([^&?]+)/i);
+      if (match) basePath = decodeURIComponent(match[1]);
+      else basePath = 'Jobs';
+    }
+    state.settings.basePath = basePath;
+    const bpEl = document.getElementById('base-path');
+    if (bpEl) bpEl.value = basePath;
+
     // Get files from OneDrive root
-    const data = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}:/children?$orderby=name&$top=200`);
+    const data = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}:/children?$orderby=name desc&$top=200`);
     const folders = (data.value || []).filter(i => i.folder);
 
     state.projects = folders.map(f => {
@@ -575,22 +596,34 @@ function openFileItem(url) {
 
 // ── New Project ──
 function showNewProjectModal() {
+  // Find next project number from existing projects
+  let nextNum = '';
+  if (state.projects.length > 0) {
+    const nums = state.projects
+      .map(p => parseInt(p.num))
+      .filter(n => !isNaN(n))
+      .sort((a, b) => b - a);
+    if (nums.length > 0) {
+      const maxNum = nums[0];
+      const digits = String(maxNum).length;
+      nextNum = String(maxNum + 1).padStart(digits, '0');
+    }
+  }
+
   document.getElementById('modal-body').innerHTML = `
     <h2 class="modal-title">New Project</h2>
     <div class="form-group">
       <label>Project Number</label>
-      <input type="text" id="new-proj-num" placeholder="e.g. 38231324" inputmode="numeric">
+      <input type="text" id="new-proj-num" value="${nextNum}" placeholder="e.g. 38231324" inputmode="numeric">
     </div>
     <div class="form-group">
       <label>Project Description</label>
       <input type="text" id="new-proj-desc" placeholder="e.g. Smith Residence">
     </div>
-    <div class="form-group">
-      <label>Template Folder Path (optional)</label>
-      <input type="text" id="new-proj-template" placeholder="e.g. _Template">
-    </div>
     <button class="btn btn-primary" onclick="createProject()">Create Project</button>`;
   openModal();
+  // Focus description since number is pre-filled
+  setTimeout(() => document.getElementById('new-proj-desc')?.focus(), 300);
 }
 
 async function createProject() {
@@ -612,7 +645,7 @@ async function createProject() {
     });
 
     // Copy template if specified
-    const templatePath = document.getElementById('new-proj-template').value.trim();
+    const templatePath = state.settings.templatePath || '';
     if (templatePath) {
       try {
         const template = await graphGet(`/me/drive/root:/${encodeURIComponent(basePath)}/${encodeURIComponent(templatePath)}`);
@@ -735,18 +768,31 @@ async function sendEmail() {
   btn.textContent = 'Sending...'; btn.disabled = true;
 
   try {
-    await graphPost('/me/sendMail', {
-      message: {
-        subject,
-        body: { contentType: 'Text', content: body },
-        toRecipients: [{ emailAddress: { address: to } }]
-      }
+    const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${state.token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: {
+          subject,
+          body: { contentType: 'Text', content: body },
+          toRecipients: [{ emailAddress: { address: to } }]
+        },
+        saveToSentItems: true
+      })
     });
-    closeModal();
-    showToast('Email sent!', 'success');
+    if (res.ok || res.status === 202) {
+      closeModal();
+      showToast('Email sent!', 'success');
+    } else {
+      const err = await res.json();
+      throw new Error(err.error?.message || res.status);
+    }
   } catch(e) {
     btn.textContent = 'Send Email'; btn.disabled = false;
-    showToast('Failed to send email', 'error');
+    showToast('Failed: ' + e.message.substring(0, 50), 'error');
   }
 }
 
@@ -942,7 +988,8 @@ async function deactivateLicence() {
 
 // ── Settings ──
 function saveSettings() {
-  state.settings.basePath = document.getElementById('base-path').value.trim() || 'Projects';
+  state.settings.basePath = document.getElementById('base-path').value.trim() || 'Jobs';
+  state.settings.templatePath = document.getElementById('template-path')?.value.trim() || '';
   localStorage.setItem(LS_SETTINGS, JSON.stringify(state.settings));
   showToast('Settings saved', 'success');
   loadProjects();
@@ -969,7 +1016,9 @@ function showPage(name) {
   if (name === 'crm') loadCRM();
   if (name === 'settings') {
     const bp = document.getElementById('base-path');
-    if (bp) bp.value = state.settings.basePath || 'Projects';
+    if (bp) bp.value = state.settings.basePath || 'Jobs';
+    const tp = document.getElementById('template-path');
+    if (tp) tp.value = state.settings.templatePath || '';
     updateLicenceUI();
   }
 }
