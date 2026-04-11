@@ -1004,11 +1004,11 @@ function extractFolderName(val) {
     // or: .../Documents/Jobs?...
     const decoded = decodeURIComponent(val);
     // Match pattern after "Documents/" or "documents/"
-    const m = decoded.match(/[Dd]ocuments[\/\]([^\/\?&]+)/);
+    const m = decoded.match(/[Dd]ocuments[\/]([^\/\?&]+)/);
     if (m) return m[1];
     // Try last path segment before query
     const noQuery = decoded.split('?')[0].split('&')[0];
-    const parts = noQuery.split(/[\/\]/);
+    const parts = noQuery.split('/');
     const last = parts.filter(p => p && !p.startsWith('http')).pop();
     return last || val;
   } catch(e) { return val; }
