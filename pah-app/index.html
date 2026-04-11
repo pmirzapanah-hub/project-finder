@@ -297,7 +297,7 @@ select option{background:var(--surface2);}
 // ── Config ──
 const CLIENT_ID = '4bc99954-7590-4dcf-bfc5-2b1c5de77d34';
 const TENANT = 'common';
-const SCOPES = 'openid profile email offline_access Mail.Read Mail.ReadWrite Mail.Send User.Read Files.ReadWrite.All Sites.ReadWrite.All';
+const SCOPES = 'openid profile email Mail.Read Mail.ReadWrite Mail.Send User.Read Files.ReadWrite.All Sites.ReadWrite.All';
 const REDIRECT_URI = window.location.origin + window.location.pathname;
 const LS_TOKEN = 'pah_token';
 const LS_SETTINGS = 'pah_settings';
@@ -316,14 +316,28 @@ let state = {
 
 // ── Init ──
 async function init() {
-  // Handle OAuth redirect
+  // Handle OAuth implicit flow redirect (token in hash)
   const hash = window.location.hash;
-  const params = new URLSearchParams(window.location.search);
+  if (hash && hash.includes('access_token')) {
+    const params = new URLSearchParams(hash.substring(1));
+    const token = params.get('access_token');
+    const expiresIn = parseInt(params.get('expires_in') || '3600');
+    if (token) {
+      const tokenData = {
+        access_token: token,
+        expires_at: Date.now() / 1000 + expiresIn
+      };
+      localStorage.setItem(LS_TOKEN, JSON.stringify(tokenData));
+      state.token = token;
+      window.history.replaceState({}, '', window.location.pathname);
+      await loadApp();
+      return;
+    }
+  }
 
-  if (params.get('code')) {
-    await handleAuthCode(params.get('code'));
+  // Handle error in hash
+  if (hash && hash.includes('error')) {
     window.history.replaceState({}, '', window.location.pathname);
-    return;
   }
 
   // Load saved token
@@ -335,11 +349,9 @@ async function init() {
         state.token = t.access_token;
         await loadApp();
         return;
-      } else if (t.refresh_token) {
-        await refreshToken(t.refresh_token);
-        return;
       }
     } catch(e) {}
+    localStorage.removeItem(LS_TOKEN);
   }
 
   // Load licence state
@@ -353,69 +365,16 @@ async function init() {
 function signIn() {
   const authUrl = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/authorize` +
     `?client_id=${CLIENT_ID}` +
-    `&response_type=code` +
+    `&response_type=token` +
     `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
     `&scope=${encodeURIComponent(SCOPES)}` +
-    `&response_mode=query` +
-    `&prompt=select_account`;
+    `&response_mode=fragment` +
+    `&prompt=select_account` +
+    `&nonce=${Math.random().toString(36)}`;
   window.location.href = authUrl;
 }
 
-async function handleAuthCode(code) {
-  try {
-    const res = await fetch(`https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: CLIENT_ID,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: REDIRECT_URI,
-        scope: SCOPES
-      })
-    });
-    const data = await res.json();
-    if (data.access_token) {
-      data.expires_at = Date.now() / 1000 + data.expires_in;
-      localStorage.setItem(LS_TOKEN, JSON.stringify(data));
-      state.token = data.access_token;
-      await loadApp();
-    } else {
-      showToast('Sign in failed', 'error');
-      document.getElementById('auth-screen').style.display = 'flex';
-    }
-  } catch(e) {
-    showToast('Sign in failed', 'error');
-    document.getElementById('auth-screen').style.display = 'flex';
-  }
-}
-
-async function refreshToken(refreshToken) {
-  try {
-    const res = await fetch(`https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: CLIENT_ID,
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        scope: SCOPES
-      })
-    });
-    const data = await res.json();
-    if (data.access_token) {
-      data.expires_at = Date.now() / 1000 + data.expires_in;
-      localStorage.setItem(LS_TOKEN, JSON.stringify(data));
-      state.token = data.access_token;
-      await loadApp();
-    } else {
-      localStorage.removeItem(LS_TOKEN);
-      document.getElementById('auth-screen').style.display = 'flex';
-    }
-  } catch(e) {
-    document.getElementById('auth-screen').style.display = 'flex';
-  }
-}
+// Token handled via implicit flow in init()
 
 function signOut() {
   localStorage.removeItem(LS_TOKEN);
