@@ -611,6 +611,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
               <label style="margin:0;font-size:0.82rem;cursor:pointer;" for="s-crm-enabled">Enable CRM</label>
             </div>
             <input class="modal-input" id="s-crmpath" placeholder="e.g. CRM" style="margin-top:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="pickCRMFolder()" style="margin-top:8px;">📂 Browse to pick CRM</button>
 
             <label>Template Folder Name (inside base folder)</label>
             <input class="modal-input" id="s-template" placeholder="e.g. 11111111 - FOLDER TEMPLATE">
@@ -958,6 +959,9 @@ async function gPut(path, body, contentType='application/json') {
   if (!r.ok) throw new Error(`Graph ${r.status}`);
   return r.status === 204 ? null : r.json();
 }
+
+// Encode a OneDrive path segment-by-segment so slashes stay as separators
+function encPath(p) { return (p||'').split('/').filter(Boolean).map(encodeURIComponent).join('/'); }
 
 // ── OneDrive data storage ──
 async function loadFromOneDrive() {
@@ -1400,22 +1404,41 @@ async function loadFinderProjects() {
   }
   document.getElementById('finder-list').innerHTML = '<div class="od-loading-inline"><div class="spinner"></div><span>Loading projects...</span></div>';
   try {
-    const basePath = S.settings.basePath || 'Jobs';
-    // Load direct children only — no recursion (recursion causes 100s of API calls and hangs)
-    let url = `/me/drive/root:/${encodeURIComponent(basePath)}:/children?$top=500`;
-    let allFolders = [];
-    while (url) {
-      const data = await gGet(url);
-      const folders = (data.value||[]).filter(f=>f.folder);
-      allFolders = allFolders.concat(folders);
-      // Follow pagination if there are more items
-      url = data['@odata.nextLink'] ? data['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
+    const basePath = (S.settings.basePath || 'Jobs').replace(/^\/+|\/+$/g,'');
+    const maxDepth = Math.max(1, parseInt(S.settings.searchDepth)||1);
+
+    // Resolve base folder to an ID (supports nested paths)
+    const base = await gGet(`/me/drive/root:/${encPath(basePath)}`);
+
+    const queue = [{ id: base.id, depth: 0 }];
+    const collected = [];
+    const seen = new Set();
+    const MAX_ITEMS = 2000; // safety to avoid runaway requests
+
+    while (queue.length) {
+      const { id, depth } = queue.shift();
+      let url = `/me/drive/items/${id}/children?$top=200`;
+      while (url) {
+        const data = await gGet(url);
+        const folders = (data.value||[]).filter(f=>f.folder);
+        for (const f of folders) {
+          if (!seen.has(f.id)) {
+            seen.add(f.id);
+            // include folders below the base (depth >= 0 -> child depth 1, etc.)
+            if (depth >= 0) collected.push({ id:f.id, name:f.name, webUrl:f.webUrl, modified:f.lastModifiedDateTime });
+            if (depth + 1 < maxDepth && collected.length < MAX_ITEMS) {
+              queue.push({ id:f.id, depth: depth + 1 });
+            }
+          }
+        }
+        url = data['@odata.nextLink'] ? data['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
+      }
+      if (collected.length >= MAX_ITEMS) break;
     }
-    S.finderProjects = allFolders.map(f => ({
-      id: f.id, name: f.name, webUrl: f.webUrl, modified: f.lastModifiedDateTime
-    }));
+
     // Sort descending by name (newest job numbers at top)
-    S.finderProjects.sort((a,b) => b.name.localeCompare(a.name));
+    collected.sort((a,b) => b.name.localeCompare(a.name));
+    S.finderProjects = collected;
     S.filteredFinder = [...S.finderProjects];
     renderFinderList();
     updateKPIs(); updateNavBadges();
@@ -1510,11 +1533,12 @@ async function createODProject() {
   const btn = document.querySelector('#mo-new-proj .btn-primary');
   btn.textContent = 'Creating...'; btn.disabled = true;
   try {
-    const basePath = S.settings.basePath||'Jobs';
+    const basePath = (S.settings.basePath||'Jobs').replace(/^\/+|\/+$/g,'');
+    const basePathEnc = encPath(basePath);
     // Get parent folder ID
     let parentId;
     try {
-      const parent = await gGet(`/me/drive/root:/${encodeURIComponent(basePath)}`);
+      const parent = await gGet(`/me/drive/root:/${basePathEnc}`);
       parentId = parent.id;
     } catch(e) { throw new Error(`Cannot find base folder "${basePath}". Check Settings.`); }
 
@@ -1529,8 +1553,10 @@ async function createODProject() {
     // Copy template if set
     if (S.settings.templatePath) {
       try {
-        const tmpl = await gGet(`/me/drive/root:/${encodeURIComponent(basePath)}/${encodeURIComponent(S.settings.templatePath)}`);
-        const newFolder = await gGet(`/me/drive/root:/${encodeURIComponent(basePath)}/${encodeURIComponent(folderName)}`);
+        const tmplPath = encPath(`${basePath}/${S.settings.templatePath}`);
+        const newPath = encPath(`${basePath}/${folderName}`);
+        const tmpl = await gGet(`/me/drive/root:/${tmplPath}`);
+        const newFolder = await gGet(`/me/drive/root:/${newPath}`);
         const tmplChildren = await gGet(`/me/drive/items/${tmpl.id}/children`);
         for (const item of (tmplChildren.value||[])) {
           await gPost(`/me/drive/items/${item.id}/copy`, { parentReference:{id:newFolder.id}, name:item.name });
@@ -1556,13 +1582,14 @@ async function loadCRMData() {
   if (!S.settings.crmEnabled) { el.innerHTML = '<div class="empty-state"><span>👥</span><p>CRM is disabled. Enable it in Settings.</p></div>'; return; }
   el.innerHTML = '<div class="od-loading-inline"><div class="spinner"></div><span>Loading CRM...</span></div>';
   try {
-    const crmPath = S.settings.crmPath||'CRM';
+    const crmPath = (S.settings.crmPath||'CRM').replace(/^\/+|\/+$/g,'');
+    const basePath = (S.settings.basePath||'Jobs').replace(/^\/+|\/+$/g,'');
     // Look for Combine Project CRM.csv in CRM folder
-    const search = await gGet(`/me/drive/root:/${encodeURIComponent(crmPath)}:/children`);
+    const search = await gGet(`/me/drive/root:/${encPath(crmPath)}:/children`);
     const csvFile = (search.value||[]).find(f=>f.name.toLowerCase().includes('combine') && f.name.toLowerCase().includes('crm'));
     if (!csvFile) {
       // Try base path
-      const baseSearch = await gGet(`/me/drive/root:/${encodeURIComponent(S.settings.basePath||'Jobs')}:/children`);
+      const baseSearch = await gGet(`/me/drive/root:/${encPath(basePath)}:/children`);
       const altFile = (baseSearch.value||[]).find(f=>f.name.toLowerCase().includes('crm'));
       if (!altFile) { el.innerHTML = '<div class="empty-state"><span>📄</span><p>No CRM CSV file found.<br>Set your CRM folder path in Settings.</p></div>'; return; }
     }
@@ -1900,11 +1927,16 @@ function fpSelect(targetInputId, name) {
   toast('✓ Selected: ' + name);
 }
 
+async function pickCRMFolder() {
+  if (!S.token) { toast('Sign in with Microsoft first'); return; }
+  pickFolder('s-crmpath', null);
+}
+
 async function pickFolderInBase(targetInputId) {
   if (!S.token) { toast('Sign in with Microsoft first'); return; }
-  const basePath = S.settings.basePath || 'Jobs';
+  const basePath = (S.settings.basePath || 'Jobs').replace(/^\/+|\/+$/g,'');
   try {
-    const base = await gGet(`/me/drive/root:/${encodeURIComponent(basePath)}`);
+    const base = await gGet(`/me/drive/root:/${encPath(basePath)}`);
     pickFolder(targetInputId, base.id, [{id:base.id, name:basePath}]);
   } catch(e) { toast('Could not open base folder: '+e.message); }
 }
