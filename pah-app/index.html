@@ -927,9 +927,14 @@ async function checkLicenceFromAzure(oid, displayName) {
       localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
       updateLicenceUI();
       toast('\u2713 Licence verified');
+    } else {
+      // Azure says not licensed — clear any stale local cache
+      S.licence = { activated: false, key: '', instanceId: '', oid: '' };
+      localStorage.removeItem(LS_LIC);
+      updateLicenceUI();
     }
   } catch(e) {
-    // Azure check failed - fall back to locally stored licence
+    // Azure unreachable — fall back to locally stored licence silently
     console.warn('Licence check failed, using local:', e.message);
   }
 }
@@ -2029,18 +2034,21 @@ async function activateLicence() {
 
 async function deactivateLicence() {
   if (!confirm('Deactivate this device? Your key will be freed.')) return;
-  if (S.licence.instanceId !== 'owner' && S.msUser?.id) {
+  // Clear locally FIRST so UI updates immediately regardless of network
+  const oldLicence = { ...S.licence };
+  S.licence = { activated:false, key:'', instanceId:'', oid:'' };
+  localStorage.removeItem(LS_LIC);
+  updateLicenceUI(); closeModal('mo-licence'); toast('Licence deactivated');
+  // Then call Azure in background to free the seat
+  if (oldLicence.instanceId !== 'owner' && S.msUser?.id) {
     try {
       await fetch(LICENCE_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'deactivate', oid: S.msUser.id })
       });
-    } catch(e) {}
+    } catch(e) { console.warn('Deactivation API call failed:', e.message); }
   }
-  S.licence = { activated:false, key:'', instanceId:'', oid:'' };
-  localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
-  updateLicenceUI(); closeModal('mo-licence'); toast('Licence deactivated');
 }
 
 // ── Delete confirm ──
