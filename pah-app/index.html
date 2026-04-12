@@ -611,7 +611,6 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
               <label style="margin:0;font-size:0.82rem;cursor:pointer;" for="s-crm-enabled">Enable CRM</label>
             </div>
             <input class="modal-input" id="s-crmpath" placeholder="e.g. CRM" style="margin-top:8px;">
-            <button class="btn btn-ghost btn-sm" onclick="pickCRMFolder()" style="margin-top:8px;">📂 Browse to pick CRM</button>
 
             <label>Template Folder Name (inside base folder)</label>
             <input class="modal-input" id="s-template" placeholder="e.g. 11111111 - FOLDER TEMPLATE">
@@ -837,6 +836,7 @@ const SCOPES = ['openid','profile','email','User.Read','Mail.Read','Mail.ReadWri
 const DATA_PATH = 'PAH_App/data.json'; // stored in user's OneDrive root
 const LS_LIC = 'pah_lic2';
 const LS_SETTINGS = 'pah_settings2';
+const LICENCE_API = 'https://pah-licence-api-gtd7cydca7agc0dw.australiaeast-01.azurewebsites.net/api/azure-function';
 
 // ── State ──
 let S = {
@@ -901,6 +901,8 @@ async function afterMSSignIn(account) {
     document.getElementById('settings-ms-btn').style.display = 'none';
     document.getElementById('settings-ms-out').style.display = '';
     document.getElementById('settings-account-info').textContent = `Signed in as ${me.displayName} (${me.mail || me.userPrincipalName})`;
+    // Auto-check licence via Azure Function using MS object ID
+    await checkLicenceFromAzure(me.id, me.displayName);
     // If not locally logged in, auto-login with MS user
     if (!S.user) {
       S.user = { displayName: me.displayName, role: 'admin', ms: true };
@@ -912,6 +914,24 @@ async function afterMSSignIn(account) {
       setState('loading'); loadFolder('root');
     }
   } catch(e) {}
+}
+
+// ── Azure Licence API ──
+async function checkLicenceFromAzure(oid, displayName) {
+  if (!oid) return;
+  try {
+    const r = await fetch(`${LICENCE_API}?action=check&oid=${encodeURIComponent(oid)}`);
+    const d = await r.json();
+    if (d.licensed) {
+      S.licence = { activated: true, key: d.key || '...', instanceId: 'azure', oid };
+      localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
+      updateLicenceUI();
+      toast('\u2713 Licence verified');
+    }
+  } catch(e) {
+    // Azure check failed - fall back to locally stored licence
+    console.warn('Licence check failed, using local:', e.message);
+  }
 }
 
 async function msSignOut() {
@@ -959,9 +979,6 @@ async function gPut(path, body, contentType='application/json') {
   if (!r.ok) throw new Error(`Graph ${r.status}`);
   return r.status === 204 ? null : r.json();
 }
-
-// Encode a OneDrive path segment-by-segment so slashes stay as separators
-function encPath(p) { return (p||'').split('/').filter(Boolean).map(encodeURIComponent).join('/'); }
 
 // ── OneDrive data storage ──
 async function loadFromOneDrive() {
@@ -1404,41 +1421,22 @@ async function loadFinderProjects() {
   }
   document.getElementById('finder-list').innerHTML = '<div class="od-loading-inline"><div class="spinner"></div><span>Loading projects...</span></div>';
   try {
-    const basePath = (S.settings.basePath || 'Jobs').replace(/^\/+|\/+$/g,'');
-    const maxDepth = Math.max(1, parseInt(S.settings.searchDepth)||1);
-
-    // Resolve base folder to an ID (supports nested paths)
-    const base = await gGet(`/me/drive/root:/${encPath(basePath)}`);
-
-    const queue = [{ id: base.id, depth: 0 }];
-    const collected = [];
-    const seen = new Set();
-    const MAX_ITEMS = 2000; // safety to avoid runaway requests
-
-    while (queue.length) {
-      const { id, depth } = queue.shift();
-      let url = `/me/drive/items/${id}/children?$top=200`;
-      while (url) {
-        const data = await gGet(url);
-        const folders = (data.value||[]).filter(f=>f.folder);
-        for (const f of folders) {
-          if (!seen.has(f.id)) {
-            seen.add(f.id);
-            // include folders below the base (depth >= 0 -> child depth 1, etc.)
-            if (depth >= 0) collected.push({ id:f.id, name:f.name, webUrl:f.webUrl, modified:f.lastModifiedDateTime });
-            if (depth + 1 < maxDepth && collected.length < MAX_ITEMS) {
-              queue.push({ id:f.id, depth: depth + 1 });
-            }
-          }
-        }
-        url = data['@odata.nextLink'] ? data['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
-      }
-      if (collected.length >= MAX_ITEMS) break;
+    const basePath = S.settings.basePath || 'Jobs';
+    // Load direct children only — no recursion (recursion causes 100s of API calls and hangs)
+    let url = `/me/drive/root:/${encodeURIComponent(basePath)}:/children?$top=500`;
+    let allFolders = [];
+    while (url) {
+      const data = await gGet(url);
+      const folders = (data.value||[]).filter(f=>f.folder);
+      allFolders = allFolders.concat(folders);
+      // Follow pagination if there are more items
+      url = data['@odata.nextLink'] ? data['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
     }
-
+    S.finderProjects = allFolders.map(f => ({
+      id: f.id, name: f.name, webUrl: f.webUrl, modified: f.lastModifiedDateTime
+    }));
     // Sort descending by name (newest job numbers at top)
-    collected.sort((a,b) => b.name.localeCompare(a.name));
-    S.finderProjects = collected;
+    S.finderProjects.sort((a,b) => b.name.localeCompare(a.name));
     S.filteredFinder = [...S.finderProjects];
     renderFinderList();
     updateKPIs(); updateNavBadges();
@@ -1533,12 +1531,11 @@ async function createODProject() {
   const btn = document.querySelector('#mo-new-proj .btn-primary');
   btn.textContent = 'Creating...'; btn.disabled = true;
   try {
-    const basePath = (S.settings.basePath||'Jobs').replace(/^\/+|\/+$/g,'');
-    const basePathEnc = encPath(basePath);
+    const basePath = S.settings.basePath||'Jobs';
     // Get parent folder ID
     let parentId;
     try {
-      const parent = await gGet(`/me/drive/root:/${basePathEnc}`);
+      const parent = await gGet(`/me/drive/root:/${encodeURIComponent(basePath)}`);
       parentId = parent.id;
     } catch(e) { throw new Error(`Cannot find base folder "${basePath}". Check Settings.`); }
 
@@ -1553,10 +1550,8 @@ async function createODProject() {
     // Copy template if set
     if (S.settings.templatePath) {
       try {
-        const tmplPath = encPath(`${basePath}/${S.settings.templatePath}`);
-        const newPath = encPath(`${basePath}/${folderName}`);
-        const tmpl = await gGet(`/me/drive/root:/${tmplPath}`);
-        const newFolder = await gGet(`/me/drive/root:/${newPath}`);
+        const tmpl = await gGet(`/me/drive/root:/${encodeURIComponent(basePath)}/${encodeURIComponent(S.settings.templatePath)}`);
+        const newFolder = await gGet(`/me/drive/root:/${encodeURIComponent(basePath)}/${encodeURIComponent(folderName)}`);
         const tmplChildren = await gGet(`/me/drive/items/${tmpl.id}/children`);
         for (const item of (tmplChildren.value||[])) {
           await gPost(`/me/drive/items/${item.id}/copy`, { parentReference:{id:newFolder.id}, name:item.name });
@@ -1582,14 +1577,13 @@ async function loadCRMData() {
   if (!S.settings.crmEnabled) { el.innerHTML = '<div class="empty-state"><span>👥</span><p>CRM is disabled. Enable it in Settings.</p></div>'; return; }
   el.innerHTML = '<div class="od-loading-inline"><div class="spinner"></div><span>Loading CRM...</span></div>';
   try {
-    const crmPath = (S.settings.crmPath||'CRM').replace(/^\/+|\/+$/g,'');
-    const basePath = (S.settings.basePath||'Jobs').replace(/^\/+|\/+$/g,'');
+    const crmPath = S.settings.crmPath||'CRM';
     // Look for Combine Project CRM.csv in CRM folder
-    const search = await gGet(`/me/drive/root:/${encPath(crmPath)}:/children`);
+    const search = await gGet(`/me/drive/root:/${encodeURIComponent(crmPath)}:/children`);
     const csvFile = (search.value||[]).find(f=>f.name.toLowerCase().includes('combine') && f.name.toLowerCase().includes('crm'));
     if (!csvFile) {
       // Try base path
-      const baseSearch = await gGet(`/me/drive/root:/${encPath(basePath)}:/children`);
+      const baseSearch = await gGet(`/me/drive/root:/${encodeURIComponent(S.settings.basePath||'Jobs')}:/children`);
       const altFile = (baseSearch.value||[]).find(f=>f.name.toLowerCase().includes('crm'));
       if (!altFile) { el.innerHTML = '<div class="empty-state"><span>📄</span><p>No CRM CSV file found.<br>Set your CRM folder path in Settings.</p></div>'; return; }
     }
@@ -1735,19 +1729,43 @@ async function sendEmail() {
   const btn = document.querySelector('#mo-compose .btn-primary');
   btn.textContent = 'Sending...'; btn.disabled = true;
   try {
-    // Use HTML content type - plain text emails are more likely to be flagged as spam
-    const htmlBody = body.replace(/\n/g,'<br>');
+    // Build both HTML and plain text bodies — dual-content emails are trusted more by spam filters
+    const plainText = body;
+    const htmlBody = body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    // Use sender's actual address explicitly (prevents spoofing flags)
+    const senderAddress = S.msUser?.mail || S.msUser?.userPrincipalName || '';
+    const senderName = S.msUser?.displayName || '';
     const msg = {
-      message:{
+      message: {
         subject,
-        body:{ contentType:'HTML', content:`<html><body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">${htmlBody}</body></html>` },
-        toRecipients:[{emailAddress:{address:to}}],
-        importance: 'normal'
+        // Dual-body: HTML primary + plain text alternative — greatly reduces spam scoring
+        body: {
+          contentType: 'HTML',
+          content: [
+            '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>',
+            '<body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">',
+            htmlBody,
+            '</body></html>'
+          ].join('')
+        },
+        toRecipients: [{emailAddress:{address:to}}],
+        // Explicit from + replyTo matching the authenticated sender (avoids mismatch flags)
+        ...(senderAddress ? {
+          from: { emailAddress:{ address:senderAddress, name:senderName } },
+          replyTo: [{ emailAddress:{ address:senderAddress, name:senderName } }]
+        } : {}),
+        importance: 'normal',
+        // Mark as a normal transactional message, not bulk/marketing
+        inferenceClassification: 'focused'
       },
-      saveToSentItems:true
+      saveToSentItems: true
     };
     if (cc) msg.message.ccRecipients = cc.split(',').map(e=>({emailAddress:{address:e.trim()}}));
-    const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{Authorization:`Bearer ${S.token}`,'Content-Type':'application/json'},body:JSON.stringify(msg)});
+    const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: { Authorization:`Bearer ${S.token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify(msg)
+    });
     if (r.ok||r.status===202) { closeModal('mo-compose'); toast('✓ Email sent'); }
     else { const e=await r.json(); throw new Error(e.error?.message||r.status); }
   } catch(e) { toast('Send failed: '+e.message.substring(0,50)); }
@@ -1927,16 +1945,11 @@ function fpSelect(targetInputId, name) {
   toast('✓ Selected: ' + name);
 }
 
-async function pickCRMFolder() {
-  if (!S.token) { toast('Sign in with Microsoft first'); return; }
-  pickFolder('s-crmpath', null);
-}
-
 async function pickFolderInBase(targetInputId) {
   if (!S.token) { toast('Sign in with Microsoft first'); return; }
-  const basePath = (S.settings.basePath || 'Jobs').replace(/^\/+|\/+$/g,'');
+  const basePath = S.settings.basePath || 'Jobs';
   try {
-    const base = await gGet(`/me/drive/root:/${encPath(basePath)}`);
+    const base = await gGet(`/me/drive/root:/${encodeURIComponent(basePath)}`);
     pickFolder(targetInputId, base.id, [{id:base.id, name:basePath}]);
   } catch(e) { toast('Could not open base folder: '+e.message); }
 }
@@ -1986,19 +1999,29 @@ async function activateLicence() {
   if (!key) { toast('Enter a licence key'); return; }
   const btn = document.querySelector('#mo-licence .btn-primary');
   btn.textContent = 'Activating...'; btn.disabled = true;
+  // Owner bypass key
   if (key === 'PAH-OWNER-2026') {
-    S.licence = { activated:true, key, instanceId:'owner' };
+    S.licence = { activated:true, key, instanceId:'owner', oid:'owner' };
     localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
-    updateLicenceUI(); closeModal('mo-licence'); toast('✓ Owner licence activated');
+    updateLicenceUI(); closeModal('mo-licence'); toast('\u2713 Owner licence activated');
     btn.textContent = 'Activate'; btn.disabled = false; return;
   }
+  // Must be signed in with Microsoft to activate
+  if (!S.msUser?.id) {
+    toast('Sign in with Microsoft 365 first'); btn.textContent = 'Activate'; btn.disabled = false; return;
+  }
   try {
-    const r = await fetch('https://api.lemonsqueezy.com/v1/licenses/activate',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({license_key:key,instance_name:'PAH_PWA_'+Date.now()})});
+    // Activate via Azure Function (which calls LemonSqueezy securely)
+    const r = await fetch(LICENCE_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'activate', key, oid: S.msUser.id, displayName: S.msUser.displayName || '' })
+    });
     const d = await r.json();
     if (d.activated) {
-      S.licence = { activated:true, key, instanceId:d.instance?.identifier||d.instance?.id||'' };
+      S.licence = { activated:true, key, instanceId: d.instanceId||'azure', oid: S.msUser.id };
       localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
-      updateLicenceUI(); closeModal('mo-licence'); toast('✓ Licence activated');
+      updateLicenceUI(); closeModal('mo-licence'); toast('\u2713 Licence activated');
     } else { toast(d.error||'Invalid licence key'); }
   } catch(e) { toast('Activation failed: '+e.message); }
   btn.textContent = 'Activate'; btn.disabled = false;
@@ -2006,12 +2029,16 @@ async function activateLicence() {
 
 async function deactivateLicence() {
   if (!confirm('Deactivate this device? Your key will be freed.')) return;
-  if (S.licence.instanceId && S.licence.instanceId !== 'owner' && S.licence.key) {
+  if (S.licence.instanceId !== 'owner' && S.msUser?.id) {
     try {
-      await fetch('https://api.lemonsqueezy.com/v1/licenses/deactivate',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({license_key:S.licence.key,instance_id:S.licence.instanceId})});
+      await fetch(LICENCE_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deactivate', oid: S.msUser.id })
+      });
     } catch(e) {}
   }
-  S.licence = { activated:false, key:'', instanceId:'' };
+  S.licence = { activated:false, key:'', instanceId:'', oid:'' };
   localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
   updateLicenceUI(); closeModal('mo-licence'); toast('Licence deactivated');
 }
