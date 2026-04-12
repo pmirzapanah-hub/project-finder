@@ -819,6 +819,21 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 </div></div>
 
 <div id="toast" class="toast"></div>
+
+<!-- Licence Gate Overlay -->
+<div id="lic-gate" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(7,13,26,0.97);backdrop-filter:blur(8px);flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+  <div style="width:100%;max-width:420px;background:var(--surface);border:1px solid rgba(248,81,73,0.3);border-radius:20px;padding:36px;text-align:center;box-shadow:0 0 60px rgba(248,81,73,0.15);">
+    <div style="font-size:3rem;margin-bottom:16px;">🔑</div>
+    <div style="font-family:'Orbitron',monospace;font-size:1rem;font-weight:700;color:var(--red);margin-bottom:10px;letter-spacing:2px;">LICENCE REQUIRED</div>
+    <div style="font-size:0.82rem;color:var(--text-dim);line-height:1.7;margin-bottom:20px;" id="lic-gate-msg">An active licence is required to use PAH Project Finder.</div>
+    <div class="modal-field"><label style="font-size:0.72rem;color:var(--text-dim);display:block;margin-bottom:6px;text-align:left;">LICENCE KEY</label>
+      <input class="modal-input" id="lic-gate-input" placeholder="XXXX-XXXX-XXXX-XXXX" autocapitalize="characters" autocorrect="off" spellcheck="false">
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px;justify-content:center;" onclick="activateLicenceGate()">Activate Licence</button>
+    <a href="https://projectfinder.lemonsqueezy.com/checkout/buy/8b623398-9c3a-4a51-8cc9-03da88fa3345" target="_blank" class="btn btn-ghost" style="width:100%;margin-top:8px;justify-content:center;">Buy Licence →</a>
+    <button class="btn btn-ghost btn-sm" style="margin-top:12px;opacity:0.5;" onclick="doLogout()">Sign out</button>
+  </div>
+</div>
 <div id="notif-banner"></div>
 <div id="user-menu" style="display:none;position:fixed;top:65px;right:16px;z-index:500;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:8px;min-width:180px;box-shadow:var(--glow-s);">
   <div style="padding:10px 14px;font-size:0.8rem;color:var(--text-dim);border-bottom:1px solid var(--border2);margin-bottom:6px;" id="user-menu-info"></div>
@@ -919,6 +934,9 @@ async function afterMSSignIn(account) {
 // ── Azure Licence API ──
 async function checkLicenceFromAzure(oid, displayName) {
   if (!oid) return;
+  // Always wipe local cache first — LemonSqueezy is the source of truth
+  S.licence = { activated: false, key: '', instanceId: '', oid: '' };
+  localStorage.removeItem(LS_LIC);
   try {
     const r = await fetch(`${LICENCE_API}?action=check&oid=${encodeURIComponent(oid)}`);
     const d = await r.json();
@@ -926,16 +944,19 @@ async function checkLicenceFromAzure(oid, displayName) {
       S.licence = { activated: true, key: d.key || '...', instanceId: 'azure', oid };
       localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
       updateLicenceUI();
-      toast('\u2713 Licence verified');
+      hideLicenceGate();
     } else {
-      // Azure says not licensed — clear any stale local cache
-      S.licence = { activated: false, key: '', instanceId: '', oid: '' };
-      localStorage.removeItem(LS_LIC);
+      // Not licensed — clear cache and show gate
       updateLicenceUI();
+      showLicenceGate('Your licence is inactive or has expired. Please enter a valid key or purchase a new licence.');
     }
   } catch(e) {
-    // Azure unreachable — fall back to locally stored licence silently
-    console.warn('Licence check failed, using local:', e.message);
+    // Azure/LemonSqueezy unreachable — grant grace period but warn
+    console.warn('Licence check failed:', e.message);
+    S.licence = { activated: true, key: 'grace', instanceId: 'grace', oid, grace: true };
+    updateLicenceUI();
+    hideLicenceGate();
+    toast('\u26a0\ufe0f Could not verify licence \u2014 working offline');
   }
 }
 
@@ -1080,6 +1101,10 @@ function showApp() {
   updateLicenceUI();
   renderAll();
   loadFinderProjects();
+  // Always re-verify licence with LemonSqueezy on every app load
+  if (S.msUser?.id) {
+    checkLicenceFromAzure(S.msUser.id, S.msUser.displayName);
+  }
 }
 
 function doLogout() {
@@ -1970,6 +1995,48 @@ function requestNotificationPermission() {
 }
 
 // ── Licence ──
+// ── Licence Gate ──
+function showLicenceGate(msg) {
+  const gate = document.getElementById('lic-gate');
+  if (!gate) return;
+  gate.style.display = 'flex';
+  if (msg) document.getElementById('lic-gate-msg').textContent = msg;
+}
+
+function hideLicenceGate() {
+  const gate = document.getElementById('lic-gate');
+  if (gate) gate.style.display = 'none';
+}
+
+async function activateLicenceGate() {
+  const key = document.getElementById('lic-gate-input').value.trim().toUpperCase();
+  if (!key) { toast('Enter a licence key'); return; }
+  const btn = document.querySelector('#lic-gate .btn-primary');
+  btn.textContent = 'Activating...'; btn.disabled = true;
+  // Owner bypass
+  if (key === 'PAH-OWNER-2026') {
+    S.licence = { activated:true, key, instanceId:'owner', oid:'owner' };
+    localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
+    updateLicenceUI(); hideLicenceGate(); toast('\u2713 Owner licence activated');
+    btn.textContent = 'Activate Licence'; btn.disabled = false; return;
+  }
+  if (!S.msUser?.id) { toast('Sign in with Microsoft first'); btn.textContent = 'Activate Licence'; btn.disabled = false; return; }
+  try {
+    const r = await fetch(LICENCE_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'activate', key, oid: S.msUser.id, displayName: S.msUser.displayName || '' })
+    });
+    const d = await r.json();
+    if (d.activated) {
+      S.licence = { activated:true, key, instanceId: d.instanceId||'azure', oid: S.msUser.id };
+      localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
+      updateLicenceUI(); hideLicenceGate(); toast('\u2713 Licence activated');
+    } else { toast(d.error||'Invalid licence key'); }
+  } catch(e) { toast('Activation failed: '+e.message); }
+  btn.textContent = 'Activate Licence'; btn.disabled = false;
+}
+
 function updateLicenceUI() {
   const active = S.licence.activated;
   // Topbar badge
