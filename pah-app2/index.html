@@ -636,8 +636,13 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
             <div id="lic-settings-actions"></div>
           </div>
 
+          <div class="settings-group" id="team-mgmt-group">
+            <h3>👥 Team Management</h3>
+            <div id="team-mgmt-section"><div style="font-size:0.8rem;color:var(--text-dim)">Loading team info...</div></div>
+          </div>
+
           <div class="settings-group">
-            <h3>👤 Users</h3>
+            <h3>👤 Local Users</h3>
             <div id="users-list"></div>
             <button class="btn btn-primary btn-sm" onclick="openAddUserModal()" style="margin-top:12px;">+ Add User</button>
           </div>
@@ -819,6 +824,7 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
 </div></div>
 
 <div id="toast" class="toast"></div>
+<div id="notif-banner"></div>
 
 <!-- Licence Gate Overlay -->
 <div id="lic-gate" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(7,13,26,0.97);backdrop-filter:blur(8px);flex-direction:column;align-items:center;justify-content:center;padding:24px;">
@@ -834,7 +840,24 @@ body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradi
     <button class="btn btn-ghost btn-sm" style="margin-top:12px;opacity:0.5;" onclick="doLogout()">Sign out</button>
   </div>
 </div>
-<div id="notif-banner"></div>
+
+<!-- Invite Staff Modal -->
+<div class="modal-overlay" id="mo-invite"><div class="modal">
+  <div class="modal-title">✉️ Invite Staff Member</div>
+  <div class="modal-field"><label>Email Address</label>
+    <input class="modal-input" id="invite-email" placeholder="colleague@company.com" type="email">
+  </div>
+  <div class="modal-field"><label>Role</label>
+    <select class="modal-input" id="invite-role">
+      <option value="staff">Staff — search, view, email, calendar</option>
+    </select>
+  </div>
+  <div style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;">An invitation email will be sent automatically. They sign in with Microsoft to claim their seat.</div>
+  <div class="modal-footer">
+    <button class="btn btn-ghost" onclick="closeModal('mo-invite')">Cancel</button>
+    <button class="btn btn-primary" onclick="inviteStaffMember()">Send Invite</button>
+  </div>
+</div></div>
 <div id="user-menu" style="display:none;position:fixed;top:65px;right:16px;z-index:500;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:8px;min-width:180px;box-shadow:var(--glow-s);">
   <div style="padding:10px 14px;font-size:0.8rem;color:var(--text-dim);border-bottom:1px solid var(--border2);margin-bottom:6px;" id="user-menu-info"></div>
   <div onclick="goTo('settings');hideUserMenu()" style="padding:9px 14px;border-radius:8px;cursor:pointer;font-size:0.82rem;transition:background 0.12s" onmouseover="this.style.background='var(--blue-dim)'" onmouseout="this.style.background=''">⚙️ Settings</div>
@@ -862,6 +885,8 @@ let S = {
   taskStatuses: [{id:'pending',label:'Pending',color:'var(--gold)',done:false},{id:'in-progress',label:'In Progress',color:'var(--blue)',done:false},{id:'done',label:'Done',color:'var(--green)',done:true},{id:'blocked',label:'Blocked',color:'var(--red)',done:false}],
   settings: { basePath:'Jobs', crmPath:'CRM', templatePath:'', searchDepth:2, crmEnabled:false },
   licence: { activated:false, key:'', instanceId:'' },
+  role: 'admin',
+  adminOid: null,
   finderProjects: [], filteredFinder: [],
   crmRecords: [], filteredCRM: [],
   odPath: [], odView: 'list',
@@ -931,36 +956,145 @@ async function afterMSSignIn(account) {
   } catch(e) {}
 }
 
-// ── Azure Licence API ──
+// ── Azure Licence check ──
 async function checkLicenceFromAzure(oid, displayName) {
   if (!oid) return;
   try {
-    const r = await fetch(`${LICENCE_API}?action=check&oid=${encodeURIComponent(oid)}`);
+    const email = S.msUser?.mail || S.msUser?.userPrincipalName || '';
+    // Try auto-join for staff with pending invite
+    if (email) {
+      try {
+        const joinRes = await fetch(LICENCE_API, {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({action:'auto-join', oid, email, displayName:displayName||''})
+        });
+        const joinData = await joinRes.json();
+        if (joinData.joined) {
+          S.role = joinData.role || 'staff';
+          S.adminOid = joinData.adminOid;
+          S.licence = {activated:true, key:'...', instanceId:'azure', oid};
+          localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
+          updateLicenceUI(); applyRoleUI(); hideLicenceGate();
+          toast('✓ Welcome! Access granted as ' + S.role);
+          return;
+        }
+      } catch(e2) {}
+    }
+    // Standard check
+    const r = await fetch(`${LICENCE_API}?action=check&oid=${encodeURIComponent(oid)}&email=${encodeURIComponent(email)}`);
     const d = await r.json();
     if (d.licensed) {
-      // Licensed — update cache and hide gate
-      S.licence = { activated: true, key: d.key || '...', instanceId: 'azure', oid };
+      S.role = d.role || 'admin';
+      S.adminOid = S.role === 'admin' ? oid : (S.adminOid || oid);
+      S.licence = {activated:true, key:d.key||'...', instanceId:'azure', oid};
       localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
-      updateLicenceUI();
-      hideLicenceGate();
+      updateLicenceUI(); applyRoleUI(); hideLicenceGate();
+      if (S.role === 'admin') loadTeamInfo(oid);
+    } else if (d.pendingInvite) {
+      showLicenceGate('You have been invited! Sign in with Microsoft to join your team.');
     } else {
-      // Definitively not licensed — NOW clear cache and show gate
-      S.licence = { activated: false, key: '', instanceId: '', oid: '' };
+      S.licence = {activated:false, key:'', instanceId:'', oid:''};
       localStorage.removeItem(LS_LIC);
       updateLicenceUI();
-      showLicenceGate('Your licence is inactive or has expired. Please enter a valid key or purchase a new licence.');
+      showLicenceGate('No active licence found. Enter your key or ask your admin to invite you.');
     }
   } catch(e) {
-    // Azure/LemonSqueezy unreachable — keep existing local state, warn user
     console.warn('Licence check failed:', e.message);
-    // Only grant grace if there was a previously valid licence
     if (!S.licence.activated) {
       showLicenceGate('Could not verify licence. Please check your internet connection.');
     } else {
-      toast('\u26a0\ufe0f Could not verify licence \u2014 working offline');
+      toast('⚠️ Could not verify licence — working offline');
       hideLicenceGate();
     }
   }
+}
+
+// Apply role-based UI
+function applyRoleUI() {
+  const isAdmin = S.role === 'admin';
+  ['nav-settings','bn-settings'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isAdmin ? '' : 'none';
+  });
+  document.querySelectorAll('[onclick="showNewProjectModal()"]').forEach(el => {
+    el.style.display = isAdmin ? '' : 'none';
+  });
+  const badge = document.getElementById('lic-topbadge');
+  if (badge && !isAdmin) { badge.textContent = 'Staff'; badge.className = 'lic-badge active'; }
+}
+
+async function loadTeamInfo(adminOid) {
+  if (!adminOid || S.role !== 'admin') return;
+  try {
+    const r = await fetch(`${LICENCE_API}?action=get-team&adminOid=${encodeURIComponent(adminOid)}`);
+    S.teamInfo = await r.json();
+    renderTeamManagement();
+  } catch(e) {}
+}
+
+async function inviteStaffMember() {
+  const email = document.getElementById('invite-email').value.trim();
+  const role = document.getElementById('invite-role').value;
+  if (!email) { toast('Enter an email address'); return; }
+  if (!S.msUser?.id) { toast('Sign in with Microsoft first'); return; }
+  const btn = document.querySelector('#mo-invite .btn-primary');
+  btn.textContent = 'Sending...'; btn.disabled = true;
+  try {
+    const r = await fetch(LICENCE_API, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        action:'invite', adminOid:S.msUser.id, inviteEmail:email, role,
+        msToken:S.token, adminName:S.msUser.displayName||'',
+        pwaDomain:'https://pmirzapanah-hub.github.io'
+      })
+    });
+    const d = await r.json();
+    if (d.invited) {
+      closeModal('mo-invite');
+      toast(d.emailSent ? '✓ Invitation sent to '+email : '✓ Invite created');
+      loadTeamInfo(S.msUser.id);
+    } else { toast(d.error || 'Invite failed'); }
+  } catch(e) { toast('Invite failed: '+e.message); }
+  btn.textContent = 'Send Invite'; btn.disabled = false;
+}
+
+async function removeTeamMember(targetOid, name) {
+  if (!confirm('Remove '+name+' from your team?')) return;
+  try {
+    const r = await fetch(LICENCE_API, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'remove-user', adminOid:S.msUser.id, targetOid})
+    });
+    const d = await r.json();
+    if (d.removed) { toast('✓ '+name+' removed'); loadTeamInfo(S.msUser.id); }
+  } catch(e) { toast('Remove failed: '+e.message); }
+}
+
+function renderTeamManagement() {
+  const el = document.getElementById('team-mgmt-section');
+  if (!el || S.role !== 'admin') return;
+  const info = S.teamInfo || {};
+  const team = (info.team||[]).filter(m=>m.role!=='admin');
+  const pending = info.pending||[];
+  const seatsUsed = info.seatsUsed||0;
+  const seatsTotal = info.seatsTotal||1;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:0.8rem;color:var(--text-dim)"><span style="color:var(--blue);font-weight:700">${seatsUsed}</span> / ${seatsTotal} seats used</div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('mo-invite')">+ Invite Staff</button>
+    </div>
+    ${team.map(m=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border2)">
+        <div><div style="font-size:0.85rem;font-weight:600">${m.displayName||m.email||'Unknown'}</div>
+        <div style="font-size:0.72rem;color:var(--text-dim)">${m.email||''} · <span class="badge badge-blue">${m.role}</span></div></div>
+        <button class="btn btn-danger btn-sm" onclick="removeTeamMember('${m.RowKey}','${(m.displayName||m.email||'').replace(/'/g,"\'")}')">Remove</button>
+      </div>`).join('')}
+    ${pending.map(p=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border2);opacity:0.6">
+        <div><div style="font-size:0.85rem">${p.inviteEmail}</div>
+        <div style="font-size:0.72rem;color:var(--text-dim)">Pending invite</div></div>
+      </div>`).join('')}
+    ${team.length===0&&pending.length===0?'<div style="font-size:0.8rem;color:var(--text-dim);text-align:center;padding:16px">No staff added yet</div>':''}`;
 }
 
 async function msSignOut() {
@@ -1102,12 +1236,11 @@ function showApp() {
   initDefaultUsers();
   loadSettings();
   updateLicenceUI();
+  applyRoleUI();
   renderAll();
   loadFinderProjects();
   // Always re-verify licence with LemonSqueezy on every app load
-  if (S.msUser?.id) {
-    checkLicenceFromAzure(S.msUser.id, S.msUser.displayName);
-  }
+  if (S.msUser?.id) checkLicenceFromAzure(S.msUser.id, S.msUser.displayName);
 }
 
 function doLogout() {
@@ -1455,20 +1588,14 @@ async function loadFinderProjects() {
   document.getElementById('finder-list').innerHTML = '<div class="od-loading-inline"><div class="spinner"></div><span>Loading projects...</span></div>';
   try {
     const basePath = S.settings.basePath || 'Jobs';
-    // Load direct children only — no recursion (recursion causes 100s of API calls and hangs)
     let url = `/me/drive/root:/${encodeURIComponent(basePath)}:/children?$top=500`;
     let allFolders = [];
     while (url) {
       const data = await gGet(url);
-      const folders = (data.value||[]).filter(f=>f.folder);
-      allFolders = allFolders.concat(folders);
-      // Follow pagination if there are more items
+      allFolders = allFolders.concat((data.value||[]).filter(f=>f.folder));
       url = data['@odata.nextLink'] ? data['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
     }
-    S.finderProjects = allFolders.map(f => ({
-      id: f.id, name: f.name, webUrl: f.webUrl, modified: f.lastModifiedDateTime
-    }));
-    // Sort descending by name (newest job numbers at top)
+    S.finderProjects = allFolders.map(f => ({ id:f.id, name:f.name, webUrl:f.webUrl, modified:f.lastModifiedDateTime }));
     S.finderProjects.sort((a,b) => b.name.localeCompare(a.name));
     S.filteredFinder = [...S.finderProjects];
     renderFinderList();
@@ -1762,43 +1889,21 @@ async function sendEmail() {
   const btn = document.querySelector('#mo-compose .btn-primary');
   btn.textContent = 'Sending...'; btn.disabled = true;
   try {
-    // Build both HTML and plain text bodies — dual-content emails are trusted more by spam filters
-    const plainText = body;
     const htmlBody = body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-    // Use sender's actual address explicitly (prevents spoofing flags)
     const senderAddress = S.msUser?.mail || S.msUser?.userPrincipalName || '';
     const senderName = S.msUser?.displayName || '';
     const msg = {
       message: {
         subject,
-        // Dual-body: HTML primary + plain text alternative — greatly reduces spam scoring
-        body: {
-          contentType: 'HTML',
-          content: [
-            '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>',
-            '<body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">',
-            htmlBody,
-            '</body></html>'
-          ].join('')
-        },
+        body: { contentType:'HTML', content:`<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">${htmlBody}</body></html>` },
         toRecipients: [{emailAddress:{address:to}}],
-        // Explicit from + replyTo matching the authenticated sender (avoids mismatch flags)
-        ...(senderAddress ? {
-          from: { emailAddress:{ address:senderAddress, name:senderName } },
-          replyTo: [{ emailAddress:{ address:senderAddress, name:senderName } }]
-        } : {}),
-        importance: 'normal',
-        // Mark as a normal transactional message, not bulk/marketing
-        inferenceClassification: 'focused'
+        ...(senderAddress ? { from:{emailAddress:{address:senderAddress,name:senderName}}, replyTo:[{emailAddress:{address:senderAddress,name:senderName}}] } : {}),
+        importance: 'normal', inferenceClassification: 'focused'
       },
       saveToSentItems: true
     };
     if (cc) msg.message.ccRecipients = cc.split(',').map(e=>({emailAddress:{address:e.trim()}}));
-    const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-      method: 'POST',
-      headers: { Authorization:`Bearer ${S.token}`, 'Content-Type':'application/json' },
-      body: JSON.stringify(msg)
-    });
+    const r = await fetch('https://graph.microsoft.com/v1.0/me/sendMail',{method:'POST',headers:{Authorization:`Bearer ${S.token}`,'Content-Type':'application/json'},body:JSON.stringify(msg)});
     if (r.ok||r.status===202) { closeModal('mo-compose'); toast('✓ Email sent'); }
     else { const e=await r.json(); throw new Error(e.error?.message||r.status); }
   } catch(e) { toast('Send failed: '+e.message.substring(0,50)); }
@@ -1811,30 +1916,18 @@ function setState(s) { ['connect','loading','ui'].forEach(k=>{const el=document.
 async function loadFolder(fid, full=false) {
   setState('loading');
   try {
-    let items = [];
-    let url;
-    if (fid==='root') {
-      url = '/me/drive/root/children?$top=200';
-      S.odPath = [{id:'root',name:'OneDrive'}];
-    } else {
-      url = `/me/drive/items/${fid}/children?$top=200`;
-    }
-    // Follow pagination to get all items
+    let items = [], url;
+    if (fid==='root') { url='/me/drive/root/children?$top=200'; S.odPath=[{id:'root',name:'OneDrive'}]; }
+    else { url=`/me/drive/items/${fid}/children?$top=200`; }
     while (url) {
       const d = await gGet(url);
       items = items.concat(d.value||[]);
       url = d['@odata.nextLink'] ? d['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0','') : null;
     }
-    // Sort folders first, then files, both alphabetically
-    items.sort((a,b) => {
-      if (!!a.folder !== !!b.folder) return a.folder ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-    setState('ui');
-    renderODPath();
-    renderODItems(items);
+    items.sort((a,b) => { if(!!a.folder!==!!b.folder) return a.folder?-1:1; return a.name.localeCompare(b.name); });
+    setState('ui'); renderODPath(); renderODItems(items);
     document.getElementById('od-count').textContent = `${items.length} items`;
-  } catch(e) { setState('connect'); toast('OneDrive error: ' + e.message); }
+  } catch(e) { setState('connect'); toast('OneDrive error: '+e.message); }
 }
 
 function renderODPath() {
@@ -1917,6 +2010,8 @@ function refreshSettingsUI() {
   document.getElementById('s-crm-enabled').checked = S.settings.crmEnabled||false;
   renderUsersList();
   updateLicenceUI();
+  renderTeamManagement();
+  if (S.role === 'admin' && S.msUser?.id && !S.teamInfo) loadTeamInfo(S.msUser.id);
   if (S.msUser) {
     document.getElementById('settings-account-info').textContent = `${S.msUser.displayName} (${S.msUser.mail||S.msUser.userPrincipalName})`;
     document.getElementById('settings-ms-btn').style.display = 'none';
@@ -1935,47 +2030,24 @@ function savePaths() {
   loadFinderProjects();
 }
 
-async function pickBaseFolder() { pickFolder('s-basepath', null); }
+async function pickBaseFolder() { pickFolder('s-basepath'); }
 
-async function pickFolder(targetInputId, parentId=null, pathStack=[]) {
+async function pickFolder(targetInputId, parentId=null) {
   if (!S.token) { toast('Sign in with Microsoft first'); return; }
-  let overlay = document.getElementById('folder-picker-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.className = 'modal-overlay open';
-    overlay.id = 'folder-picker-overlay';
-    document.body.appendChild(overlay);
-  }
-  overlay.innerHTML = `<div class="modal"><div class="modal-title">📂 Pick Folder</div>
-    <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;" id="fp-path">
-      <span class="crumb" onclick="pickFolder('${targetInputId}',null,[])">OneDrive</span>
-      ${pathStack.map((p,i)=>`<span style="opacity:0.4"> › </span><span class="crumb" onclick="pickFolder('${targetInputId}','${p.id}',${JSON.stringify(pathStack.slice(0,i+1)).replace(/"/g,"'").replace(/'/g,"\\'")})">${p.name}</span>`).join('')}
-    </div>
-    <div id="folder-picker-list"><div class="od-loading-inline"><div class="spinner"></div></div></div>
-    <div class="modal-footer">
-      ${pathStack.length ? `<button class="btn btn-primary btn-sm" onclick="fpSelect('${targetInputId}','${pathStack[pathStack.length-1].name}')">✓ Select "${pathStack[pathStack.length-1].name}"</button>` : ''}
-      <button class="btn btn-ghost" onclick="document.getElementById('folder-picker-overlay').remove()">Cancel</button>
-    </div></div>`;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  overlay.id = 'folder-picker-overlay';
+  overlay.innerHTML = `<div class="modal"><div class="modal-title">📂 Pick Folder</div><div id="folder-picker-list"><div class="od-loading-inline"><div class="spinner"></div></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancel</button></div></div>`;
+  document.body.appendChild(overlay);
   try {
-    const path = parentId ? `/me/drive/items/${parentId}/children?$top=200` : '/me/drive/root/children?$top=200';
+    const path = parentId ? `/me/drive/items/${parentId}/children?$top=100&$orderby=name` : '/me/drive/root/children?$top=100&$orderby=name';
     const d = await gGet(path);
-    const folders = (d.value||[]).filter(f=>f.folder).sort((a,b)=>a.name.localeCompare(b.name));
-    const newStack = JSON.stringify(pathStack).replace(/"/g,"'");
-    document.getElementById('folder-picker-list').innerHTML = folders.length ? folders.map(f=>`
-      <div class="file-row">
-        <span class="ri">📁</span>
-        <span class="rn" style="flex:1">${f.name}</span>
-        <button class="btn btn-ghost btn-sm" onclick="fpSelect('${targetInputId}','${f.name.replace(/'/g,"\\'")}')">Select</button>
-        <button class="btn btn-ghost btn-sm" onclick="pickFolder('${targetInputId}','${f.id}',[...${newStack},{id:'${f.id}',name:'${f.name.replace(/'/g,"\\'")}'}])">▶</button>
+    const folders = (d.value||[]).filter(f=>f.folder);
+    overlay.querySelector('#folder-picker-list').innerHTML = folders.length ? folders.map(f=>`
+      <div class="file-row" onclick="document.getElementById('${targetInputId}').value='${f.name.replace(/'/g,"\'")}';document.getElementById('folder-picker-overlay').remove();toast('Selected: ${f.name.replace(/'/g,"\'")}')">
+        <span class="ri">📁</span><span class="rn">${f.name}</span><span class="rs">${f.folder.childCount} items</span>
       </div>`).join('') : '<div class="empty-state"><span>📁</span><p>No folders found</p></div>';
-  } catch(e) { document.getElementById('folder-picker-list').innerHTML = `<div class="empty-state"><span>⚠️</span><p>${e.message}</p></div>`; }
-}
-
-function fpSelect(targetInputId, name) {
-  document.getElementById(targetInputId).value = name;
-  const ov = document.getElementById('folder-picker-overlay');
-  if (ov) ov.remove();
-  toast('✓ Selected: ' + name);
+  } catch(e) { overlay.querySelector('#folder-picker-list').innerHTML = `<div class="empty-state"><span>⚠️</span><p>${e.message}</p></div>`; }
 }
 
 async function pickFolderInBase(targetInputId) {
@@ -1983,7 +2055,7 @@ async function pickFolderInBase(targetInputId) {
   const basePath = S.settings.basePath || 'Jobs';
   try {
     const base = await gGet(`/me/drive/root:/${encodeURIComponent(basePath)}`);
-    pickFolder(targetInputId, base.id, [{id:base.id, name:basePath}]);
+    pickFolder(targetInputId, base.id);
   } catch(e) { toast('Could not open base folder: '+e.message); }
 }
 
@@ -1997,7 +2069,6 @@ function requestNotificationPermission() {
   if ('Notification' in window) Notification.requestPermission().then(p=>{ if(p==='granted') toast('Notifications enabled'); });
 }
 
-// ── Licence ──
 // ── Licence Gate ──
 function showLicenceGate(msg) {
   const gate = document.getElementById('lic-gate');
@@ -2016,30 +2087,32 @@ async function activateLicenceGate() {
   if (!key) { toast('Enter a licence key'); return; }
   const btn = document.querySelector('#lic-gate .btn-primary');
   btn.textContent = 'Activating...'; btn.disabled = true;
-  // Owner bypass
   if (key === 'PAH-OWNER-2026') {
-    S.licence = { activated:true, key, instanceId:'owner', oid:'owner' };
+    S.licence = {activated:true, key, instanceId:'owner', oid:'owner'};
+    S.role = 'admin';
     localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
-    updateLicenceUI(); hideLicenceGate(); toast('\u2713 Owner licence activated');
+    updateLicenceUI(); applyRoleUI(); hideLicenceGate(); toast('✓ Owner licence activated');
     btn.textContent = 'Activate Licence'; btn.disabled = false; return;
   }
-  if (!S.msUser?.id) { toast('Sign in with Microsoft first'); btn.textContent = 'Activate Licence'; btn.disabled = false; return; }
+  if (!S.msUser?.id) { toast('Sign in with Microsoft first'); btn.textContent='Activate Licence'; btn.disabled=false; return; }
   try {
     const r = await fetch(LICENCE_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'activate', key, oid: S.msUser.id, displayName: S.msUser.displayName || '' })
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'activate', key, oid:S.msUser.id, displayName:S.msUser.displayName||'', email:S.msUser.mail||S.msUser.userPrincipalName||''})
     });
     const d = await r.json();
     if (d.activated) {
-      S.licence = { activated:true, key, instanceId: d.instanceId||'azure', oid: S.msUser.id };
+      S.role = 'admin';
+      S.licence = {activated:true, key, instanceId:d.instanceId||'azure', oid:S.msUser.id};
       localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
-      updateLicenceUI(); hideLicenceGate(); toast('\u2713 Licence activated');
+      updateLicenceUI(); applyRoleUI(); hideLicenceGate(); toast('✓ Licence activated');
+      loadTeamInfo(S.msUser.id);
     } else { toast(d.error||'Invalid licence key'); }
   } catch(e) { toast('Activation failed: '+e.message); }
   btn.textContent = 'Activate Licence'; btn.disabled = false;
 }
 
+// ── Licence ──
 function updateLicenceUI() {
   const active = S.licence.activated;
   // Topbar badge
@@ -2074,29 +2147,25 @@ async function activateLicence() {
   if (!key) { toast('Enter a licence key'); return; }
   const btn = document.querySelector('#mo-licence .btn-primary');
   btn.textContent = 'Activating...'; btn.disabled = true;
-  // Owner bypass key
   if (key === 'PAH-OWNER-2026') {
-    S.licence = { activated:true, key, instanceId:'owner', oid:'owner' };
+    S.licence = {activated:true, key, instanceId:'owner', oid:'owner'};
     localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
-    updateLicenceUI(); closeModal('mo-licence'); toast('\u2713 Owner licence activated');
+    updateLicenceUI(); closeModal('mo-licence'); toast('✓ Owner licence activated');
     btn.textContent = 'Activate'; btn.disabled = false; return;
   }
-  // Must be signed in with Microsoft to activate
-  if (!S.msUser?.id) {
-    toast('Sign in with Microsoft 365 first'); btn.textContent = 'Activate'; btn.disabled = false; return;
-  }
+  if (!S.msUser?.id) { toast('Sign in with Microsoft 365 first'); btn.textContent='Activate'; btn.disabled=false; return; }
   try {
-    // Activate via Azure Function (which calls LemonSqueezy securely)
     const r = await fetch(LICENCE_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'activate', key, oid: S.msUser.id, displayName: S.msUser.displayName || '' })
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'activate', key, oid:S.msUser.id, displayName:S.msUser.displayName||'', email:S.msUser.mail||S.msUser.userPrincipalName||''})
     });
     const d = await r.json();
     if (d.activated) {
-      S.licence = { activated:true, key, instanceId: d.instanceId||'azure', oid: S.msUser.id };
+      S.role = 'admin';
+      S.licence = {activated:true, key, instanceId:d.instanceId||'azure', oid:S.msUser.id};
       localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
-      updateLicenceUI(); closeModal('mo-licence'); toast('\u2713 Licence activated');
+      updateLicenceUI(); applyRoleUI(); closeModal('mo-licence'); toast('✓ Licence activated');
+      loadTeamInfo(S.msUser.id);
     } else { toast(d.error||'Invalid licence key'); }
   } catch(e) { toast('Activation failed: '+e.message); }
   btn.textContent = 'Activate'; btn.disabled = false;
@@ -2104,20 +2173,18 @@ async function activateLicence() {
 
 async function deactivateLicence() {
   if (!confirm('Deactivate this device? Your key will be freed.')) return;
-  // Clear locally FIRST so UI updates immediately regardless of network
-  const oldLicence = { ...S.licence };
-  S.licence = { activated:false, key:'', instanceId:'', oid:'' };
+  const oldLicence = {...S.licence};
+  S.licence = {activated:false, key:'', instanceId:'', oid:''};
+  S.role = 'admin';
   localStorage.removeItem(LS_LIC);
   updateLicenceUI(); closeModal('mo-licence'); toast('Licence deactivated');
-  // Then call Azure in background to free the seat
   if (oldLicence.instanceId !== 'owner' && S.msUser?.id) {
     try {
       await fetch(LICENCE_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'deactivate', oid: S.msUser.id })
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:'deactivate', oid:S.msUser.id})
       });
-    } catch(e) { console.warn('Deactivation API call failed:', e.message); }
+    } catch(e) {}
   }
 }
 
