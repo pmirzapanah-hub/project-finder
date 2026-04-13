@@ -934,29 +934,32 @@ async function afterMSSignIn(account) {
 // ── Azure Licence API ──
 async function checkLicenceFromAzure(oid, displayName) {
   if (!oid) return;
-  // Always wipe local cache first — LemonSqueezy is the source of truth
-  S.licence = { activated: false, key: '', instanceId: '', oid: '' };
-  localStorage.removeItem(LS_LIC);
   try {
     const r = await fetch(`${LICENCE_API}?action=check&oid=${encodeURIComponent(oid)}`);
     const d = await r.json();
     if (d.licensed) {
+      // Licensed — update cache and hide gate
       S.licence = { activated: true, key: d.key || '...', instanceId: 'azure', oid };
       localStorage.setItem(LS_LIC, JSON.stringify(S.licence));
       updateLicenceUI();
       hideLicenceGate();
     } else {
-      // Not licensed — clear cache and show gate
+      // Definitively not licensed — NOW clear cache and show gate
+      S.licence = { activated: false, key: '', instanceId: '', oid: '' };
+      localStorage.removeItem(LS_LIC);
       updateLicenceUI();
       showLicenceGate('Your licence is inactive or has expired. Please enter a valid key or purchase a new licence.');
     }
   } catch(e) {
-    // Azure/LemonSqueezy unreachable — grant grace period but warn
+    // Azure/LemonSqueezy unreachable — keep existing local state, warn user
     console.warn('Licence check failed:', e.message);
-    S.licence = { activated: true, key: 'grace', instanceId: 'grace', oid, grace: true };
-    updateLicenceUI();
-    hideLicenceGate();
-    toast('\u26a0\ufe0f Could not verify licence \u2014 working offline');
+    // Only grant grace if there was a previously valid licence
+    if (!S.licence.activated) {
+      showLicenceGate('Could not verify licence. Please check your internet connection.');
+    } else {
+      toast('\u26a0\ufe0f Could not verify licence \u2014 working offline');
+      hideLicenceGate();
+    }
   }
 }
 
